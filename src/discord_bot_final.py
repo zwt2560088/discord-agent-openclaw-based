@@ -922,8 +922,26 @@ class AIService:
                 )
                 logger.info("🔧 ReAct Agent using OpenAI")
 
-            # 收集所有工具
-            tools = [get_price, confirm_payment, query_knowledge, check_order_status, send_payment_confirmation]
+            # 收集所有工具（从全局作用域动态获取）
+            # 优先级：get_price 和 confirm_payment 是必需的，其他是可选的
+            required_tools = ['get_price', 'confirm_payment']
+            optional_tools = ['query_knowledge', 'check_order_status', 'send_payment_confirmation']
+            tools = []
+
+            for tool_name in required_tools:
+                if tool_name in globals():
+                    tools.append(globals()[tool_name])
+                else:
+                    logger.error(f"❌ Required tool {tool_name} not found!")
+
+            for tool_name in optional_tools:
+                if tool_name in globals():
+                    tools.append(globals()[tool_name])
+                else:
+                    logger.warning(f"⚠️ Optional tool {tool_name} not found in globals")
+
+            if not tools or len(tools) < 2:
+                raise ValueError("Not enough tools found! At least get_price and confirm_payment are required.")
 
             # 创建 ReAct prompt
             react_prompt = PromptTemplate.from_template("""You are an intelligent NBA 2K26 customer service assistant with COMPLETE MEMORY of every user's past interactions.
@@ -1089,8 +1107,8 @@ Final Answer: the final answer to the original input question
 
 {chat_history}
 
-Question: {{input}}
-Thought:{{agent_scratchpad}}""")
+Question: {input}
+Thought:{agent_scratchpad}""")
 
             # 创建 ReAct Agent
             self._react_agent = create_react_agent(llm, tools, react_prompt)
