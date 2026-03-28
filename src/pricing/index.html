@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA2K26 Pricing Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            color: #888;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab:hover, .tab.active {
+            background: #ff6b6b;
+        }
+
+        .panel {
+            display: none;
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .calculator {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #ff6b6b;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 20px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            background: linear-gradient(90deg, #ff6b6b, #ee5a5a);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .result-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .result-card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            opacity: 0.9;
+        }
+
+        .final-price {
+            font-size: 3.5rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .price-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            text-align: left;
+            background: rgba(0,0,0,0.2);
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+        }
+
+        .price-details .detail-item {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .breakdown-list {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .breakdown-item {
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            margin-bottom: 5px;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Level Management */
+        .level-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .level-table th, .level-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .level-table th {
+            background: rgba(255,255,255,0.1);
+            font-weight: 600;
+        }
+
+        .level-table tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        .level-table input {
+            background: transparent;
+            border: none;
+            color: #fff;
+            width: 100%;
+        }
+
+        .level-table input:focus {
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            padding: 4px;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            margin-right: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .action-btn.edit {
+            background: #48dbfb;
+            color: #000;
+        }
+
+        .action-btn.delete {
+            background: #ff6b6b;
+            color: #fff;
+        }
+
+        .action-btn.save {
+            background: #1dd1a1;
+            color: #000;
+        }
+
+        /* Config Panel */
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .config-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .config-card h4 {
+            margin-bottom: 15px;
+            color: #feca57;
+        }
+
+        .config-item {
+            margin-bottom: 15px;
+        }
+
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .config-item input {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #fff;
+        }
+
+        /* Quick Quote Section */
+        .quick-quote {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .quick-quote h3 {
+            margin-bottom: 15px;
+        }
+
+        .quote-presets {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .preset-btn {
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.1);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .preset-btn:hover {
+            background: rgba(0,0,0,0.2);
+            transform: scale(1.05);
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            background: #1dd1a1;
+            color: #000;
+            border-radius: 8px;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .calculator {
+                grid-template-columns: 1fr;
+            }
+
+            .price-details {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎮 NBA2K26 Pricing Management</h1>
+            <p>Reputation Boosting Calculator & Level Configuration</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('calculator')">📊 Calculator</button>
+            <button class="tab" onclick="switchTab('levels')">🎯 Level Config</button>
+            <button class="tab" onclick="switchTab('settings')">⚙️ Settings</button>
+        </div>
+
+        <!-- Calculator Panel -->
+        <div id="calculator" class="panel active">
+            <div class="quick-quote">
+                <h3>⚡ Quick Quotes</h3>
+                <div class="quote-presets">
+                    <button class="preset-btn" onclick="loadPreset('rookie-starter')">Rookie → Starter</button>
+                    <button class="preset-btn" onclick="loadPreset('starter-veteran')">Starter → Veteran</button>
+                    <button class="preset-btn" onclick="loadPreset('veteran-allstar')">Veteran → All-Star</button>
+                    <button class="preset-btn" onclick="loadPreset('to-legend')">To Legend</button>
+                </div>
+            </div>
+
+            <div class="calculator">
+                <div class="form-section">
+                    <h3 style="margin-bottom: 20px;">Customer Info</h3>
+
+                    <div class="form-group">
+                        <label>Current Level</label>
+                        <select id="currentLevel">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Current Progress (%) <span style="color:#ff6b6b">(-4 = need to fill 4%)</span></label>
+                        <input type="number" id="currentPercent" value="0" step="1" min="-100" max="100">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Target Level</label>
+                        <select id="targetLevel">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Target Progress (%) <span style="color:#ff6b6b">(-3 = stop at 97%)</span></label>
+                        <input type="number" id="targetPercent" value="0" step="1" min="-100" max="100">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Platform</label>
+                        <select id="platform">
+                            <option value="PC">PC</option>
+                            <option value="PS5">PS5</option>
+                            <option value="PS4">PS4</option>
+                            <option value="Xbox Series">Xbox Series</option>
+                            <option value="Xbox One">Xbox One</option>
+                            <option value="Switch">Switch</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="urgent">
+                            <label for="urgent">🚨 Urgent (+10%)</label>
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" id="liveStream">
+                            <label for="liveStream">📺 Live Stream (+10%)</label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Bulk Orders</label>
+                        <select id="bulkCount">
+                            <option value="1">1 order</option>
+                            <option value="3">3+ orders (5% off)</option>
+                            <option value="5">5+ orders (10% off)</option>
+                            <option value="10">10+ orders (15% off)</option>
+                        </select>
+                    </div>
+
+                    <button class="btn" onclick="calculatePrice()" style="width: 100%;">
+                        💰 Calculate Price
+                    </button>
+                </div>
+
+                <div class="result-section">
+                    <div class="result-card">
+                        <h3>Final Price</h3>
+                        <div class="final-price" id="finalPrice">$0.00</div>
+
+                        <div class="price-details">
+                            <div class="detail-item">
+                                <span>Total Reputation:</span>
+                                <span id="totalRep">0</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>Base Price:</span>
+                                <span id="basePrice">$0.00</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>Urgent Fee:</span>
+                                <span id="urgentFee">$0.00</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>Live Stream Fee:</span>
+                                <span id="liveFee">$0.00</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>Platform Multiplier:</span>
+                                <span id="platformMult">1.0x</span>
+                            </div>
+                            <div class="detail-item">
+                                <span>Bulk Discount:</span>
+                                <span id="bulkDiscount">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="breakdown-list" id="breakdownList">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Level Config Panel -->
+        <div id="levels" class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3>🎯 Level Configuration</h3>
+                <button class="btn" onclick="addNewLevel()">+ Add Level</button>
+            </div>
+
+            <table class="level-table" id="levelTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name (EN)</th>
+                        <th>Name (CN)</th>
+                        <th>Required Value</th>
+                        <th>Reward</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="levelTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Settings Panel -->
+        <div id="settings" class="panel">
+            <h3 style="margin-bottom: 20px;">⚙️ Pricing Settings</h3>
+
+            <div class="config-grid">
+                <div class="config-card">
+                    <h4>💵 Base Pricing</h4>
+                    <div class="config-item">
+                        <label>Currency</label>
+                        <input type="text" id="configCurrency" value="USD">
+                    </div>
+                    <div class="config-item">
+                        <label>Unit Price (per reputation point)</label>
+                        <input type="number" id="configUnitPrice" value="0.99" step="0.01">
+                    </div>
+                </div>
+
+                <div class="config-card">
+                    <h4>⚡ Extra Fees</h4>
+                    <div class="config-item">
+                        <label>Urgent Fee (%)</label>
+                        <input type="number" id="configUrgentFee" value="10">
+                    </div>
+                    <div class="config-item">
+                        <label>Live Stream Fee (%)</label>
+                        <input type="number" id="configLiveFee" value="10">
+                    </div>
+                    <div class="config-item">
+                        <label>Max Extra Fee (%)</label>
+                        <input type="number" id="configMaxFee" value="20">
+                    </div>
+                </div>
+
+                <div class="config-card">
+                    <h4>🎮 Platform Multipliers</h4>
+                    <div class="config-item">
+                        <label>PC</label>
+                        <input type="number" id="multPC" value="1.0" step="0.05">
+                    </div>
+                    <div class="config-item">
+                        <label>PS5</label>
+                        <input type="number" id="multPS5" value="1.1" step="0.05">
+                    </div>
+                    <div class="config-item">
+                        <label>Xbox Series</label>
+                        <input type="number" id="multXbox" value="1.1" step="0.05">
+                    </div>
+                    <div class="config-item">
+                        <label>Switch</label>
+                        <input type="number" id="multSwitch" value="1.15" step="0.05">
+                    </div>
+                </div>
+
+                <div class="config-card">
+                    <h4>🏷️ Bulk Discounts</h4>
+                    <div class="config-item">
+                        <label>3+ Orders (%)</label>
+                        <input type="number" id="discount3" value="5">
+                    </div>
+                    <div class="config-item">
+                        <label>5+ Orders (%)</label>
+                        <input type="number" id="discount5" value="10">
+                    </div>
+                    <div class="config-item">
+                        <label>10+ Orders (%)</label>
+                        <input type="number" id="discount10" value="15">
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn" onclick="saveConfig()" style="margin-top: 20px;">
+                💾 Save Settings
+            </button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Settings saved successfully!</div>
+
+    <script>
+        // Global state
+        let levels = [];
+        let config = {};
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadLevels();
+            await loadConfig();
+        });
+
+        // Tab switching
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        // Load levels
+        async function loadLevels() {
+            try {
+                const res = await fetch('/api/levels');
+                const data = await res.json();
+                levels = data.levels;
+                populateLevelSelects();
+                renderLevelTable();
+            } catch (e) {
+                console.error('Failed to load levels:', e);
+            }
+        }
+
+        // Load config
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                config = await res.json();
+                populateConfigForm();
+            } catch (e) {
+                console.error('Failed to load config:', e);
+            }
+        }
+
+        // Populate level selects
+        function populateLevelSelects() {
+            const currentSelect = document.getElementById('currentLevel');
+            const targetSelect = document.getElementById('targetLevel');
+
+            const options = levels.map(lv =>
+                `<option value="${lv.name}">${lv.name} (${lv.name_zh})</option>`
+            ).join('');
+
+            currentSelect.innerHTML = options;
+            targetSelect.innerHTML = options;
+
+            // Set defaults
+            if (levels.length > 0) {
+                currentSelect.value = levels[0].name;
+                targetSelect.value = levels[Math.min(5, levels.length - 1)].name;
+            }
+        }
+
+        // Render level table
+        function renderLevelTable() {
+            const tbody = document.getElementById('levelTableBody');
+            tbody.innerHTML = levels.map(lv => `
+                <tr data-id="${lv.id}">
+                    <td>${lv.id}</td>
+                    <td><input type="text" value="${lv.name}" data-field="name"></td>
+                    <td><input type="text" value="${lv.name_zh}" data-field="name_zh"></td>
+                    <td><input type="number" value="${lv.required_value}" data-field="required_value" step="0.01"></td>
+                    <td><input type="text" value="${lv.reward}" data-field="reward"></td>
+                    <td>
+                        <button class="action-btn save" onclick="saveLevel(${lv.id})">Save</button>
+                        <button class="action-btn delete" onclick="deleteLevel(${lv.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Populate config form
+        function populateConfigForm() {
+            document.getElementById('configCurrency').value = config.meta?.currency || 'USD';
+            document.getElementById('configUnitPrice').value = config.meta?.unit_price || 0.99;
+            document.getElementById('configUrgentFee').value = config.pricing_rules?.urgent_fee_percent || 10;
+            document.getElementById('configLiveFee').value = config.pricing_rules?.live_stream_fee_percent || 10;
+            document.getElementById('configMaxFee').value = config.pricing_rules?.max_extra_fee_percent || 20;
+
+            const mult = config.pricing_rules?.platform_multiplier || {};
+            document.getElementById('multPC').value = mult.PC || 1.0;
+            document.getElementById('multPS5').value = mult.PS5 || 1.1;
+            document.getElementById('multXbox').value = mult['Xbox Series'] || 1.1;
+            document.getElementById('multSwitch').value = mult.Switch || 1.15;
+        }
+
+        // Calculate price
+        async function calculatePrice() {
+            const data = {
+                current_level: document.getElementById('currentLevel').value,
+                current_percent: parseFloat(document.getElementById('currentPercent').value) || 0,
+                target_level: document.getElementById('targetLevel').value,
+                target_percent: parseFloat(document.getElementById('targetPercent').value) || 0,
+                platform: document.getElementById('platform').value,
+                urgent: document.getElementById('urgent').checked,
+                live_stream: document.getElementById('liveStream').checked,
+                bulk_count: parseInt(document.getElementById('bulkCount').value)
+            };
+
+            try {
+                const res = await fetch('/api/calculate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+
+                if (result.success) {
+                    const r = result.result;
+                    document.getElementById('finalPrice').textContent = `$${r.final_price.toFixed(2)}`;
+                    document.getElementById('totalRep').textContent = r.total_reputation.toLocaleString();
+                    document.getElementById('basePrice').textContent = `$${r.base_price.toFixed(2)}`;
+                    document.getElementById('urgentFee').textContent = `$${r.urgent_fee.toFixed(2)}`;
+                    document.getElementById('liveFee').textContent = `$${r.live_stream_fee.toFixed(2)}`;
+                    document.getElementById('platformMult').textContent = `${r.platform_multiplier}x`;
+                    document.getElementById('bulkDiscount').textContent = `${(r.bulk_discount * 100 || 0)}%`;
+
+                    // Render breakdown
+                    const breakdown = document.getElementById('breakdownList');
+                    breakdown.innerHTML = '<h4 style="margin-bottom:10px;">📋 Level Breakdown</h4>' +
+                        r.level_breakdown.map(item => `
+                            <div class="breakdown-item">
+                                <span>${item.level} (${item.level_zh})</span>
+                                <span>${item.action}: ${item.reputation} rep</span>
+                            </div>
+                        `).join('');
+                }
+            } catch (e) {
+                console.error('Calculation failed:', e);
+                showToast('Calculation failed!');
+            }
+        }
+
+        // Load preset
+        function loadPreset(preset) {
+            const presets = {
+                'rookie-starter': { current: 'Rookie 1', target: 'Starter 1', currentPct: 0, targetPct: 0 },
+                'starter-veteran': { current: 'Starter 1', target: 'Veteran 1', currentPct: 0, targetPct: 0 },
+                'veteran-allstar': { current: 'Veteran 1', target: 'All-Star 1', currentPct: 0, targetPct: 0 },
+                'to-legend': { current: 'Rookie 1', target: 'Legend', currentPct: 0, targetPct: 0 }
+            };
+
+            const p = presets[preset];
+            if (p) {
+                document.getElementById('currentLevel').value = p.current;
+                document.getElementById('targetLevel').value = p.target;
+                document.getElementById('currentPercent').value = p.currentPct;
+                document.getElementById('targetPercent').value = p.targetPct;
+                calculatePrice();
+            }
+        }
+
+        // Save level
+        async function saveLevel(id) {
+            const row = document.querySelector(`tr[data-id="${id}"]`);
+            const updates = {
+                id: id,
+                name: row.querySelector('[data-field="name"]').value,
+                name_zh: row.querySelector('[data-field="name_zh"]').value,
+                required_value: parseFloat(row.querySelector('[data-field="required_value"]').value),
+                reward: row.querySelector('[data-field="reward"]').value
+            };
+
+            try {
+                const res = await fetch('/api/update-level', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showToast('Level saved!');
+                    await loadLevels();
+                }
+            } catch (e) {
+                showToast('Failed to save level');
+            }
+        }
+
+        // Delete level
+        async function deleteLevel(id) {
+            if (!confirm('Are you sure you want to delete this level?')) return;
+
+            try {
+                const res = await fetch('/api/delete-level', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showToast('Level deleted!');
+                    await loadLevels();
+                }
+            } catch (e) {
+                showToast('Failed to delete level');
+            }
+        }
+
+        // Add new level
+        function addNewLevel() {
+            const newId = levels.length > 0 ? Math.max(...levels.map(l => l.id)) + 1 : 1;
+            const tbody = document.getElementById('levelTableBody');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${newId}</td>
+                <td><input type="text" placeholder="Level Name" data-field="name"></td>
+                <td><input type="text" placeholder="等级名称" data-field="name_zh"></td>
+                <td><input type="number" placeholder="1000" data-field="required_value" step="0.01"></td>
+                <td><input type="text" placeholder="Reward" data-field="reward"></td>
+                <td>
+                    <button class="action-btn save" onclick="saveNewLevel(${newId}, this)">Add</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        // Save new level
+        async function saveNewLevel(id, btn) {
+            const row = btn.closest('tr');
+            const data = {
+                id: id,
+                name: row.querySelector('[data-field="name"]').value,
+                name_zh: row.querySelector('[data-field="name_zh"]').value,
+                required_value: parseFloat(row.querySelector('[data-field="required_value"]').value) || 1000,
+                reward: row.querySelector('[data-field="reward"]').value,
+                next_level: null
+            };
+
+            try {
+                const res = await fetch('/api/add-level', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showToast('Level added!');
+                    await loadLevels();
+                }
+            } catch (e) {
+                showToast('Failed to add level');
+            }
+        }
+
+        // Save config
+        async function saveConfig() {
+            const updates = {
+                meta: {
+                    currency: document.getElementById('configCurrency').value,
+                    unit_price: parseFloat(document.getElementById('configUnitPrice').value)
+                },
+                pricing_rules: {
+                    urgent_fee_percent: parseInt(document.getElementById('configUrgentFee').value),
+                    live_stream_fee_percent: parseInt(document.getElementById('configLiveFee').value),
+                    max_extra_fee_percent: parseInt(document.getElementById('configMaxFee').value),
+                    platform_multiplier: {
+                        PC: parseFloat(document.getElementById('multPC').value),
+                        PS5: parseFloat(document.getElementById('multPS5').value),
+                        'Xbox Series': parseFloat(document.getElementById('multXbox').value),
+                        Switch: parseFloat(document.getElementById('multSwitch').value)
+                    }
+                }
+            };
+
+            try {
+                const res = await fetch('/api/update-config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                const result = await res.json();
+                if (result.success) {
+                    showToast('Settings saved!');
+                }
+            } catch (e) {
+                showToast('Failed to save settings');
+            }
+        }
+
+        // Show toast
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+</html>
+

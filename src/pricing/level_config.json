@@ -1,0 +1,212 @@
+{
+    "meta": {
+        "game": "NBA2K26",
+        "service": "Reputation Boosting",
+        "version": "1.0.0",
+        "last_updated": "2026-03-26",
+        "currency": "USD",
+        "unit_price": 0.99,
+        "description": "Reputation leveling price configuration"
+    },
+    "pricing_rules": {
+        "urgent_fee_percent": 10,
+        "live_stream_fee_percent": 10,
+        "max_extra_fee_percent": 20,
+        "platform_multiplier": {
+            "PC": 1.0,
+            "PS5": 1.1,
+            "PS4": 1.05,
+            "Xbox Series": 1.1,
+            "Xbox One": 1.05,
+            "Switch": 1.15
+        },
+        "bulk_discount": {
+            "3+": 0.95,
+            "5+": 0.90,
+            "10+": 0.85
+        }
+    },
+    "levels": [
+        {
+            "id": 1,
+            "name": "Rookie 1",
+            "name_zh": "新秀1",
+            "next_level": "Rookie 2",
+            "required_value": 100.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 2,
+            "name": "Rookie 2",
+            "name_zh": "新秀2",
+            "next_level": "Rookie 3",
+            "required_value": 150.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 3,
+            "name": "Rookie 3",
+            "name_zh": "新秀3",
+            "next_level": "Rookie 4",
+            "required_value": 250.00,
+            "reward": "Remove Shirt",
+            "reward_zh": "脱上衣"
+        },
+        {
+            "id": 4,
+            "name": "Rookie 4",
+            "name_zh": "新秀4",
+            "next_level": "Rookie 5",
+            "required_value": 300.00,
+            "reward": "+1 Badge Perk",
+            "reward_zh": "+1破帽器"
+        },
+        {
+            "id": 5,
+            "name": "Rookie 5",
+            "name_zh": "新秀5",
+            "next_level": "Starter 1",
+            "required_value": 1000.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 6,
+            "name": "Starter 1",
+            "name_zh": "先发1",
+            "next_level": "Starter 2",
+            "required_value": 1200.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 7,
+            "name": "Starter 2",
+            "name_zh": "先发2",
+            "next_level": "Starter 3",
+            "required_value": 1500.00,
+            "reward": "+1 Badge Perk",
+            "reward_zh": "+1破帽器"
+        },
+        {
+            "id": 8,
+            "name": "Starter 3",
+            "name_zh": "先发3",
+            "next_level": "Starter 4",
+            "required_value": 1800.00,
+            "reward": "Unlock Animations",
+            "reward_zh": "解锁动画"
+        },
+        {
+            "id": 9,
+            "name": "Starter 4",
+            "name_zh": "先发4",
+            "next_level": "Starter 5",
+            "required_value": 2200.00,
+            "reward": "+3 Badge Perks",
+            "reward_zh": "+3破帽器"
+        },
+        {
+            "id": 10,
+            "name": "Starter 5",
+            "name_zh": "先发5",
+            "next_level": "Veteran 1",
+            "required_value": 3000.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 11,
+            "name": "Veteran 1",
+            "name_zh": "老将1",
+            "next_level": "Veteran 2",
+            "required_value": 3500.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 12,
+            "name": "Veteran 2",
+            "name_zh": "老将2",
+            "next_level": "Veteran 3",
+            "required_value": 4000.00,
+            "reward": "+5 Badge Perks",
+            "reward_zh": "+5破帽器"
+        },
+        {
+            "id": 13,
+            "name": "Veteran 3",
+            "name_zh": "老将3",
+            "next_level": "All-Star 1",
+            "required_value": 5000.00,
+            "reward": "Exclusive Animations",
+            "reward_zh": "专属动画"
+        },
+        {
+            "id": 14,
+            "name": "All-Star 1",
+            "name_zh": "全明星1",
+            "next_level": "All-Star 2",
+            "required_value": 6000.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 15,
+            "name": "All-Star 2",
+            "name_zh": "全明星2",
+            "next_level": "All-Star 3",
+            "required_value": 7000.00,
+            "reward": "All-Star Badge",
+            "reward_zh": "全明星徽章"
+        },
+        {
+            "id": 16,
+            "name": "All-Star 3",
+            "name_zh": "全明星3",
+            "next_level": "Superstar 1",
+            "required_value": 8000.00,
+            "reward": "Exclusive Gear",
+            "reward_zh": "专属装备"
+        },
+        {
+            "id": 17,
+            "name": "Superstar 1",
+            "name_zh": "超级明星1",
+            "next_level": "Superstar 2",
+            "required_value": 10000.00,
+            "reward": "None",
+            "reward_zh": "无"
+        },
+        {
+            "id": 18,
+            "name": "Superstar 2",
+            "name_zh": "超级明星2",
+            "next_level": "Superstar 3",
+            "required_value": 12000.00,
+            "reward": "Superstar Badge",
+            "reward_zh": "超级明星徽章"
+        },
+        {
+            "id": 19,
+            "name": "Superstar 3",
+            "name_zh": "超级明星3",
+            "next_level": "Legend",
+            "required_value": 15000.00,
+            "reward": "All Unlocks",
+            "reward_zh": "全解锁"
+        },
+        {
+            "id": 20,
+            "name": "Legend",
+            "name_zh": "传奇",
+            "next_level": null,
+            "required_value": 20000.00,
+            "reward": "Legend Status",
+            "reward_zh": "传奇身份"
+        }
+    ]
+}
+

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA2K26 Order Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f23;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 20px;
+        }
+
+        header h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, #ff6b6b, #feca57);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .label {
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .stat-card.pending .value { color: #feca57; }
+        .stat-card.in_progress .value { color: #48dbfb; }
+        .stat-card.completed .value { color: #1dd1a1; }
+        .stat-card.cancelled .value { color: #ff6b6b; }
+
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .filter-btn {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 20px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover, .filter-btn.active {
+            background: #ff6b6b;
+        }
+
+        .orders-table {
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .orders-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .orders-table th, .orders-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .orders-table th {
+            background: rgba(255,255,255,0.1);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .orders-table tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-badge.pending { background: #feca57; color: #000; }
+        .status-badge.paid { background: #48dbfb; color: #000; }
+        .status-badge.assigned { background: #a55eea; color: #fff; }
+        .status-badge.in_progress { background: #48dbfb; color: #000; }
+        .status-badge.completed { background: #1dd1a1; color: #000; }
+        .status-badge.delivered { background: #10ac84; color: #fff; }
+        .status-badge.cancelled { background: #ff6b6b; color: #fff; }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            margin-right: 5px;
+        }
+
+        .action-btn.assign { background: #a55eea; color: #fff; }
+        .action-btn.complete { background: #1dd1a1; color: #000; }
+        .action-btn.view { background: #48dbfb; color: #000; }
+
+        .order-detail {
+            display: none;
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 400px;
+            height: 100%;
+            background: #1a1a2e;
+            border-left: 1px solid rgba(255,255,255,0.1);
+            padding: 20px;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        .order-detail.show {
+            display: block;
+        }
+
+        .order-detail h2 {
+            margin-bottom: 20px;
+        }
+
+        .order-detail .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .chat-messages {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .chat-message {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+
+        .chat-message.customer {
+            border-left: 3px solid #48dbfb;
+        }
+
+        .chat-message.worker {
+            border-left: 3px solid #1dd1a1;
+        }
+
+        .chat-message .header {
+            font-size: 0.8rem;
+            color: #888;
+            margin-bottom: 5px;
+        }
+
+        .chat-message .original {
+            margin-bottom: 5px;
+        }
+
+        .chat-message .translated {
+            color: #888;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        .refresh-btn {
+            padding: 10px 20px;
+            background: #48dbfb;
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .refresh-btn:hover {
+            background: #0abde3;
+        }
+
+        @media (max-width: 768px) {
+            .orders-table {
+                overflow-x: auto;
+            }
+
+            .order-detail {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 NBA2K26 Order Monitor</h1>
+            <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+        </header>
+
+        <div class="stats-grid" id="statsGrid">
+            <!-- Populated by JS -->
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" onclick="filterOrders('all')">All</button>
+            <button class="filter-btn" onclick="filterOrders('pending')">Pending</button>
+            <button class="filter-btn" onclick="filterOrders('paid')">Paid</button>
+            <button class="filter-btn" onclick="filterOrders('in_progress')">In Progress</button>
+            <button class="filter-btn" onclick="filterOrders('completed')">Completed</button>
+        </div>
+
+        <div class="orders-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Order ID</th>
+                        <th>Customer</th>
+                        <th>Service</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                        <th>Worker</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="ordersBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="order-detail" id="orderDetail">
+        <button class="close-btn" onclick="closeDetail()">×</button>
+        <h2>Order <span id="detailOrderId"></span></h2>
+        <div id="detailContent"></div>
+    </div>
+
+    <script>
+        let currentFilter = 'all';
+
+        async function loadData() {
+            await Promise.all([loadStats(), loadOrders()]);
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const stats = await res.json();
+
+                const grid = document.getElementById('statsGrid');
+                grid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="value">${stats.total || 0}</div>
+                        <div class="label">Total Orders</div>
+                    </div>
+                    <div class="stat-card pending">
+                        <div class="value">${stats.pending || 0}</div>
+                        <div class="label">Pending</div>
+                    </div>
+                    <div class="stat-card in_progress">
+                        <div class="value">${stats.in_progress || 0}</div>
+                        <div class="label">In Progress</div>
+                    </div>
+                    <div class="stat-card completed">
+                        <div class="value">${stats.completed || 0}</div>
+                        <div class="label">Completed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">${stats.today || 0}</div>
+                        <div class="label">Today</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="value">$${(stats.revenue || 0).toFixed(0)}</div>
+                        <div class="label">Revenue</div>
+                    </div>
+                `;
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+
+        async function loadOrders() {
+            try {
+                const res = await fetch('/api/orders');
+                const data = await res.json();
+                let orders = data.orders || [];
+
+                if (currentFilter !== 'all') {
+                    orders = orders.filter(o => o.status === currentFilter);
+                }
+
+                const tbody = document.getElementById('ordersBody');
+                tbody.innerHTML = orders.map(o => `
+                    <tr>
+                        <td><code>${o.id}</code></td>
+                        <td>${o.customer_name || 'Unknown'}</td>
+                        <td>${o.service_type || '-'}<br>
+                            <small>${o.current_level || ''} → ${o.target_level || ''}</small>
+                        </td>
+                        <td><strong>$${o.price || 0}</strong></td>
+                        <td><span class="status-badge ${o.status}">${o.status}</span></td>
+                        <td>${o.worker_name || '-'}</td>
+                        <td>${formatDate(o.created_at)}</td>
+                        <td>
+                            <button class="action-btn view" onclick="viewOrder('${o.id}')">View</button>
+                            ${o.status === 'pending' ? `<button class="action-btn assign" onclick="assignOrder('${o.id}')">Assign</button>` : ''}
+                            ${o.status === 'in_progress' ? `<button class="action-btn complete" onclick="completeOrder('${o.id}')">Complete</button>` : ''}
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to load orders:', e);
+            }
+        }
+
+        function filterOrders(status) {
+            currentFilter = status;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase().replace(' ', '_') === status || (status === 'all' && btn.textContent === 'All'));
+            });
+            loadOrders();
+        }
+
+        async function viewOrder(orderId) {
+            try {
+                const res = await fetch(`/api/order/${orderId}`);
+                const order = await res.json();
+
+                document.getElementById('detailOrderId').textContent = order.id;
+
+                let html = `
+                    <div style="margin-bottom: 20px;">
+                        <p><strong>Customer:</strong> ${order.customer_name}</p>
+                        <p><strong>Status:</strong> <span class="status-badge ${order.status}">${order.status}</span></p>
+                        <p><strong>Price:</strong> $${order.price}</p>
+                        <p><strong>Platform:</strong> ${order.platform}</p>
+                        <p><strong>Worker:</strong> ${order.worker_name || 'Not assigned'}</p>
+                    </div>
+                `;
+
+                if (order.messages && order.messages.length > 0) {
+                    html += `
+                        <h3>💬 Chat History</h3>
+                        <div class="chat-messages">
+                            ${order.messages.map(m => `
+                                <div class="chat-message ${m.type}">
+                                    <div class="header">${m.type === 'customer' ? '👤 Customer' : '🎮 Support'} - ${formatDate(m.timestamp)}</div>
+                                    <div class="original">${m.original}</div>
+                                    <div class="translated">→ ${m.translated}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+
+                document.getElementById('detailContent').innerHTML = html;
+                document.getElementById('orderDetail').classList.add('show');
+            } catch (e) {
+                console.error('Failed to load order:', e);
+            }
+        }
+
+        function closeDetail() {
+            document.getElementById('orderDetail').classList.remove('show');
+        }
+
+        async function assignOrder(orderId) {
+            const workerName = prompt('Enter worker name:');
+            if (!workerName) return;
+
+            try {
+                const res = await fetch('/api/assign', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: orderId,
+                        worker_id: 'manual',
+                        worker_name: workerName
+                    })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    loadData();
+                }
+            } catch (e) {
+                console.error('Failed to assign:', e);
+            }
+        }
+
+        async function completeOrder(orderId) {
+            if (!confirm('Mark this order as completed?')) return;
+
+            try {
+                const res = await fetch('/api/update-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: orderId,
+                        status: 'completed'
+                    })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    loadData();
+                }
+            } catch (e) {
+                console.error('Failed to complete:', e);
+            }
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return d.toLocaleString();
+        }
+
+        // Initial load
+        loadData();
+
+        // Auto refresh every 30 seconds
+        setInterval(loadData, 30000);
+    </script>
+</body>
+</html>
+
