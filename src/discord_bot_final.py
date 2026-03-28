@@ -24,19 +24,27 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Tuple
 
-# LangChain ReAct Agent imports (optional - graceful degradation if not available)
+# LangChain ReAct Agent imports (兼容新版 langchain 1.0+)
 try:
     from langchain.agents import create_react_agent, AgentExecutor
     from langchain.tools import tool
     from langchain.prompts import PromptTemplate
+    from langchain_openai import ChatOpenAI
     LANGCHAIN_AVAILABLE = True
 except ImportError:
-    LANGCHAIN_AVAILABLE = False
-    logger_setup = logging.getLogger("DiscordBot")
-    logger_setup.warning("⚠️ LangChain not installed. ReAct Agent features disabled. Install with: pip install langchain langchain-openai langchain-community")
-
-# 添加 legacy 目录到 Python 路径以导入 RAG Agent
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "legacy"))
+    try:
+        # 尝试旧版导入方式
+        from langchain.agents import create_react_agent, AgentExecutor
+        from langchain.tools import tool
+        from langchain.prompts import PromptTemplate
+        from langchain.chat_models import ChatOpenAI
+        LANGCHAIN_AVAILABLE = True
+    except ImportError:
+        LANGCHAIN_AVAILABLE = False
+        logger_setup = logging.getLogger("DiscordBot")
+        logger_setup.warning("⚠️ LangChain not installed. ReAct Agent features disabled. Install with: pip install langchain langchain-openai langchain-community")
+# 添加 src/legacy 目录到 Python 路径以导入 RAG Agent
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "legacy"))
 
 # ====================== 日志配置（生产级）======================
 logging.basicConfig(
@@ -45,7 +53,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("DiscordBot")
 
-load_dotenv()
+# 加载 .env 配置（优先 DOTENV_PATH 环境变量指定的路径）
+_env_file = os.environ.get("DOTENV_PATH")
+load_dotenv(_env_file) if _env_file else load_dotenv()
 
 # ====================== 配置常量 ======================
 DISCORD_TOKEN = os.getenv("discord_token")
@@ -236,7 +246,7 @@ class ContextManager:
             conn = sqlite3.connect(self._db_path)
             c = conn.cursor()
             c.execute("SELECT history FROM contexts WHERE channel_id = ? AND expires_at > ?",
-                     (channel_id, time.time()))
+                      (channel_id, time.time()))
             row = c.fetchone()
             conn.close()
             if row:
@@ -378,35 +388,96 @@ if LANGCHAIN_AVAILABLE:
         items = []
 
         # 解析订单项目
-        if any(x in details_lower for x in ["250", "challenge", "layer"]):
+        # Challenge（按数字优先匹配更大的）
+        if "250" in details_lower and any(x in details_lower for x in ["challenge", "layer", "250"]):
             items.append("250 Layers Challenge ($40)")
             total += 40
+        elif "200" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+            items.append("200 Layers Challenge ($20)")
+            total += 20
+        elif "150" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+            items.append("150 Layers Challenge ($15)")
+            total += 15
+        elif "100" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+            items.append("100 Layers Challenge ($10)")
+            total += 10
 
-        if any(x in details_lower for x in ["all 5", "all specialization", "specialty", "specialities"]):
+        # Specialty
+        if any(x in details_lower for x in ["all 5", "all specialization", "specialties", "speciality"]):
             items.append("All 5 Specialties ($20)")
             total += 20
-
-        if "50x" in details_lower:
-            items.append("50x Rep Sleeve ($15)")
+        elif any(x in details_lower for x in ["specialty", "specialisation"]):
+            items.append("Single Specialty ($15)")
             total += 15
+
+        # Rep Sleeve（按数字匹配）
+        if "300x" in details_lower:
+            items.append("300x Rep Sleeve ($30)")
+            total += 30
         elif "100x" in details_lower:
             items.append("100x Rep Sleeve ($21.50)")
             total += 21.5
-        elif "300x" in details_lower:
-            items.append("300x Rep Sleeve ($30)")
-            total += 30
+        elif "50x" in details_lower:
+            items.append("50x Rep Sleeve ($15)")
+            total += 15
 
-        if any(x in details_lower for x in ["99", "overall"]):
+        # 99 Overall
+        if any(x in details_lower for x in ["99 overall", "99 ovr", "max overall"]):
             items.append("99 Overall ($15)")
             total += 15
 
-        if any(x in details_lower for x in ["grind", "rep rank"]):
-            if "starter" in details_lower:
+        # Badge
+        if any(x in details_lower for x in ["badge", "badges", "hof badge", "gold badge"]):
+            items.append("Badge Unlock ($15)")
+            total += 15
+
+        # Rep Grind
+        if any(x in details_lower for x in ["rep grind", "grind", "rep rank"]):
+            if "legend" in details_lower:
+                items.append("Rep Grind to Legend ($60)")
+                total += 60
+            elif "veteran" in details_lower:
+                items.append("Rep Grind to Veteran ($40)")
+                total += 40
+            elif "starter" in details_lower:
                 items.append("Rep Grind to Starter ($40)")
                 total += 40
+            elif "rookie" in details_lower:
+                items.append("Rep Grind Rookie ($35)")
+                total += 35
             else:
                 items.append("Rep Grind ($40)")
                 total += 40
+
+        # Season Pass
+        if any(x in details_lower for x in ["season pass", "season 40"]):
+            items.append("Season Pass ($15)")
+            total += 15
+
+        # MT Coins
+        if any(x in details_lower for x in ["mt coin", "mt "]):
+            if "1m" in details_lower or "1m" in details_lower:
+                items.append("1M MT Coins ($80)")
+                total += 80
+            elif "500k" in details_lower:
+                items.append("500K MT Coins ($45)")
+                total += 45
+            elif "100k" in details_lower:
+                items.append("100K MT Coins ($10)")
+                total += 10
+            else:
+                items.append("MT Coins ($10-80)")
+                total += 10  # 默认最低价
+
+        # DMA
+        if "dma" in details_lower:
+            items.append("DMA Mods ($60-110)")
+            total += 60
+
+        # Account
+        if any(x in details_lower for x in ["account", "pre-built"]):
+            items.append("Pre-built Account ($80-100)")
+            total += 80
 
         if items:
             summary = f"✅ **Payment Confirmed!**\n\n**Order Summary:**\n" + "\n".join(f"• {item}" for item in items) + f"\n\n**Total: ${total}**"
@@ -479,7 +550,7 @@ class AIService:
                     api_key=DEEPSEEK_API_KEY,
                     base_url="https://api.deepseek.com/v1",
                     temperature=0.3,
-                    max_tokens=300
+                    max_tokens=500
                 )
                 logger.info("🔧 ReAct Agent using DeepSeek")
             else:
@@ -487,7 +558,7 @@ class AIService:
                     model="gpt-4o-mini",
                     api_key=OPENAI_API_KEY,
                     temperature=0.3,
-                    max_tokens=300
+                    max_tokens=500
                 )
                 logger.info("🔧 ReAct Agent using OpenAI")
 
@@ -497,12 +568,45 @@ class AIService:
             # 创建 ReAct prompt
             react_prompt = PromptTemplate.from_template("""You are an intelligent NBA 2K26 customer service assistant with access to tools for checking prices, confirming payments, and querying knowledge base.
 
-IMPORTANT CONTEXT:
-- If user mentions "paid", "paid for", "already paid", "payment confirmed" → Use confirm_payment tool
-- If user asks about price/cost → Use get_price tool
-- If user mentions specific order details → Use confirm_payment tool
-- Always be concise and friendly
-- Include emojis in responses
+IMPORTANT RULES:
+1. If user mentions "paid", "paid for", "already paid", "payment confirmed", "已付" → Use confirm_payment tool
+2. If user asks about price/cost → Use get_price tool
+3. If user mentions specific order details → Use confirm_payment tool
+4. ALWAYS check the conversation history for order details BEFORE calling confirm_payment
+5. When calling confirm_payment, include ALL relevant order details from the current message AND history in the Action Input
+6. Always be concise and friendly
+7. Include emojis in responses
+
+CRITICAL: Before using confirm_payment, review the conversation history for any order details mentioned earlier (e.g., "50x", "250 all specialization", "rep grind", "99 overall"). If the user's message doesn't contain order details but previous messages do, you MUST include those details in the Action Input.
+
+Examples:
+
+Example 1 - User confirms payment with details:
+Question: he already paid for 250 all specialization + 50x
+Thought: User confirms payment. I should use confirm_payment tool with the full message.
+Action: confirm_payment
+Action Input: he already paid for 250 all specialization + 50x
+Observation: ✅ Payment Confirmed! Order Summary: 250 Layers Challenge ($40), All 5 Specialties ($20), 50x Rep Sleeve ($15). Total: $75
+Thought: I now know the final answer.
+Final Answer: ✅ Payment confirmed! Total $75. Admin please run `!confirm-payment @user 75 "250 all specialization + 50x"` to create fulfillment channel.
+
+Example 2 - User says "paid" without details, but history has order info:
+Question: he already paid
+Thought: User mentions payment but no order details. Let me check history - I see previous messages about "250 all specialization" and "50x". I should include those in the confirm_payment call.
+Action: confirm_payment
+Action Input: he already paid for 250 all specialization + 50x
+Observation: ✅ Payment Confirmed! Order Summary: 250 Layers Challenge ($40), All 5 Specialties ($20), 50x Rep Sleeve ($15). Total: $75
+Thought: I now know the final answer.
+Final Answer: ✅ Payment confirmed! Total $75 based on previous conversation. Admin please run `!confirm-payment @user 75 "250 all specialization + 50x"` to create fulfillment channel.
+
+Example 3 - User says "paid" with NO history:
+Question: I paid
+Thought: User mentions payment but there's no order details in the message or history. I should still call confirm_payment.
+Action: confirm_payment
+Action Input: I paid
+Observation: ✅ Payment confirmed for: I paid. Awaiting admin to create fulfillment channel.
+Thought: I now know the final answer.
+Final Answer: I see you've paid! 💰 Please tell me what you ordered (e.g., 50x Rep Sleeve, 250 Challenge, etc.) so I can confirm the amount and create your order channel.
 
 Available tools:
 {tools}
@@ -547,8 +651,8 @@ Thought:{{agent_scratchpad}}""")
             return "", False
 
         try:
-            # 构建历史上下文字符串
-            history_str = "\n".join([f"{msg['role']}: {msg['content'][:50]}" for msg in chat_history[-2:]])
+            # 构建历史上下文字符串（最近 6 条消息，完整内容）
+            history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history[-6:]])
 
             # 检查是否是支付确认的情景
             is_payment_context = any(
@@ -571,9 +675,9 @@ Thought:{{agent_scratchpad}}""")
 
             # 检查是否包含订单确认信息
             has_intent = (
-                "[ORDER_INTENT]" in reply or
-                "✅ Payment Confirmed" in reply or
-                is_payment_context
+                    "[ORDER_INTENT]" in reply or
+                    "✅ Payment Confirmed" in reply or
+                    is_payment_context
             )
 
             # 清理输出
@@ -1049,8 +1153,8 @@ def create_bot() -> commands.Bot:
             # 检查是否有订单意图（仅用于识别，不创建订单）
             # 使用词边界匹配避免 "pass" 误匹配 "password"
             has_purchase_intent = (
-                has_explicit_order_request or
-                (has_order_intent and any(re.search(r'\b' + re.escape(kw) + r'\b', user_msg_lower) for kw in ["rep", "99", "pass", "mt", "vc", "service", "boost"]))
+                    has_explicit_order_request or
+                    (has_order_intent and any(re.search(r'\b' + re.escape(kw) + r'\b', user_msg_lower) for kw in ["rep", "99", "pass", "mt", "vc", "service", "boost"]))
             )
 
             if has_purchase_intent:

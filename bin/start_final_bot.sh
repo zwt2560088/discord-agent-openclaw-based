@@ -5,6 +5,11 @@
 
 set -e  # 任何命令失败都退出
 
+# 切换到项目根目录（bin/ 的上级目录）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
 echo "════════════════════════════════════════════"
 echo "🚀 启动最终版 Discord Bot"
 echo "════════════════════════════════════════════"
@@ -29,12 +34,19 @@ for package in "${required_packages[@]}"; do
     fi
 done
 
-# 检查 .env 文件
+# 检查 .env 文件（优先 src/.env，其次项目根目录 .env）
 echo ""
 echo "🔍 检查配置文件..."
-if [ ! -f ".env" ]; then
+ENV_FILE=""
+if [ -f "src/.env" ]; then
+    ENV_FILE="src/.env"
+elif [ -f ".env" ]; then
+    ENV_FILE=".env"
+fi
+if [ -z "$ENV_FILE" ]; then
     echo "⚠️  .env 文件不存在，创建默认配置..."
-    cat > .env << 'EOF'
+    mkdir -p src
+    cat > src/.env << 'EOF'
 # Discord Bot 配置
 discord_token=YOUR_DISCORD_TOKEN_HERE
 
@@ -46,24 +58,24 @@ deepseek_api_key=YOUR_DEEPSEEK_KEY_HERE
 HTTP_PROXY=http://127.0.0.1:8890
 EOF
     echo "✅ .env 文件已创建，请编辑并填写 TOKEN"
-    echo "📝 编辑: nano .env"
+    echo "📝 编辑: nano src/.env"
     exit 1
 else
-    echo "✅ .env 文件存在"
+    echo "✅ .env 文件存在 ($ENV_FILE)"
 fi
 
 # 检查必要的 TOKEN
 echo ""
 echo "🔍 验证 TOKEN 配置..."
-discord_token=$(grep -m 1 "discord_token" .env | cut -d'=' -f2 | xargs)
+discord_token=$(grep -m 1 "discord_token" "$ENV_FILE" | cut -d'=' -f2 | xargs)
 if [ -z "$discord_token" ] || [ "$discord_token" = "YOUR_DISCORD_TOKEN_HERE" ]; then
     echo "❌ 错误: discord_token 未配置!"
-    echo "请编辑 .env 文件，填入你的 Discord Bot Token"
+    echo "请编辑 $ENV_FILE 文件，填入你的 Discord Bot Token"
     exit 1
 fi
 echo "✅ discord_token 已配置"
 
-ai_key=$(grep -E "openai_api_key|deepseek_api_key" .env | cut -d'=' -f2 | xargs | head -1)
+ai_key=$(grep -E "openai_api_key|deepseek_api_key" "$ENV_FILE" | cut -d'=' -f2 | xargs | head -1)
 if [ -z "$ai_key" ] || [ "$ai_key" = "YOUR_OPENAI_KEY_HERE" ] || [ "$ai_key" = "YOUR_DEEPSEEK_KEY_HERE" ]; then
     echo "⚠️  警告: AI API Key 未配置，机器人将以关键词模式运行（仅快速回复）"
 else
@@ -104,6 +116,9 @@ echo "  • 按 Ctrl+C 可停止 Bot"
 echo "  • 在 Discord 中 @Bot 或在 order- 频道内发送消息"
 echo "  • 查看日志: tail -f logs/*.log"
 echo ""
+
+# 设置 .env 文件路径，确保 python 能找到
+export DOTENV_PATH="$PROJECT_ROOT/src/.env"
 
 # 启动 Bot（带日志）
 log_file="./logs/bot_$(date +%Y%m%d_%H%M%S).log"

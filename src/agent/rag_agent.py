@@ -74,7 +74,7 @@ class RAGAgent:
             self.pricing_service = pricing_service
         else:
             try:
-                from src.pricing.pricing_service import PricingService
+                from pricing.pricing_service import PricingService
                 self.pricing_service = PricingService(reputation_calculator=reputation_calculator)
             except Exception as e:
                 logger.warning(f"Failed to initialize pricing service: {e}")
