@@ -1,0 +1,10 @@
+⚠️ LangChain not installed. ReAct Agent features disabled. Install with: pip install langchain langchain-openai langchain-community
+2026-03-28 21:29:26,412 [INFO] DiscordBot: ✅ SQLite context database initialized
+2026-03-28 21:29:26,412 [INFO] DiscordBot: AI Services: OpenAI=True, DeepSeek=True, ReAct=False
+2026-03-28 21:29:30,824 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-03-28 21:29:36,674 [INFO] DiscordBot: ✅ RAG Agent initialized successfully
+2026-03-28 21:29:36,675 [INFO] DiscordBot: 🚀 Starting Discord Bot (Final Optimized Version)...
+2026-03-28 21:29:36,675 [INFO] DiscordBot: 🌐 Proxy configured: http://127.0.0.1:8890
+2026-03-28 21:29:36,675 [WARNING] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-28 21:29:36,675 [WARNING] discord.client: davey is not installed, voice will NOT be supported
+2026-03-28 21:29:36,675 [INFO] discord.client: logging in using static token

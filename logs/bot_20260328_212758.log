@@ -1,0 +1,13 @@
+⚠️ LangChain not installed. ReAct Agent features disabled. Install with: pip install langchain langchain-openai langchain-community
+2026-03-28 21:28:03,661 [INFO] DiscordBot: ✅ SQLite context database initialized
+2026-03-28 21:28:03,661 [INFO] DiscordBot: AI Services: OpenAI=True, DeepSeek=True, ReAct=False
+2026-03-28 21:28:03,661 [WARNING] DiscordBot: ⚠️ Failed to initialize RAG Agent: No module named 'rag_agent'
+2026-03-28 21:28:03,661 [INFO] DiscordBot: 🔄 Will fall back to simple knowledge base queries
+2026-03-28 21:28:03,661 [INFO] DiscordBot: 🚀 Starting Discord Bot (Final Optimized Version)...
+2026-03-28 21:28:03,661 [INFO] DiscordBot: 🌐 Proxy configured: http://127.0.0.1:8890
+2026-03-28 21:28:03,662 [WARNING] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-28 21:28:03,662 [WARNING] discord.client: davey is not installed, voice will NOT be supported
+2026-03-28 21:28:03,662 [INFO] discord.client: logging in using static token
+2026-03-28 21:28:05,647 [INFO] discord.gateway: Shard ID None has connected to Gateway (Session ID: b44a4527ac3bc9d30ae92ebe430ff57b).
+2026-03-28 21:28:07,685 [INFO] DiscordBot: ✅ Bot logged in as Legend's Agent(Ping me question)#0564
+2026-03-28 21:28:07,686 [INFO] DiscordBot: 📊 Connected to 1 server(s)

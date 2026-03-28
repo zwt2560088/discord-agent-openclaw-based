@@ -1,0 +1,43 @@
+2026-03-28 22:07:21,492 [WARNING] dotenv.main: Python-dotenv could not parse statement starting at line 5
+2026-03-28 22:07:21,502 [INFO] DiscordBot: ✅ SQLite context database initialized
+2026-03-28 22:07:21,504 [INFO] DiscordBot: AI Services: OpenAI=True, DeepSeek=True, ReAct=True
+2026-03-28 22:07:29,789 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-03-28 22:07:35,099 [INFO] DiscordBot: ✅ RAG Agent initialized successfully
+2026-03-28 22:07:35,344 [INFO] DiscordBot: 🔧 ReAct Agent using DeepSeek
+2026-03-28 22:07:35,344 [ERROR] DiscordBot: ❌ ReAct Agent initialization failed: Prompt missing required variables: {'agent_scratchpad'}
+Traceback (most recent call last):
+  File "/Users/zhaowentao/IdeaProjects/discord-agent-openclaw-based/src/discord_bot_final.py", line 717, in _init_react_agent
+    self._react_agent = create_react_agent(llm, tools, react_prompt)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/langchain/agents/react/agent.py", line 123, in create_react_agent
+    raise ValueError(f"Prompt missing required variables: {missing_vars}")
+ValueError: Prompt missing required variables: {'agent_scratchpad'}
+2026-03-28 22:07:35,345 [INFO] DiscordBot: ✅ LangChain ReAct Agent initialized successfully
+2026-03-28 22:07:35,346 [INFO] DiscordBot: 🚀 Starting Discord Bot (Final Optimized Version)...
+2026-03-28 22:07:35,346 [INFO] DiscordBot: 🌐 Proxy configured: http://127.0.0.1:8890
+2026-03-28 22:07:35,346 [WARNING] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-28 22:07:35,346 [WARNING] discord.client: davey is not installed, voice will NOT be supported
+2026-03-28 22:07:35,347 [INFO] discord.client: logging in using static token
+2026-03-28 22:07:37,488 [INFO] discord.gateway: Shard ID None has connected to Gateway (Session ID: d266773ae53f17429c86d74d3c7cccdc).
+2026-03-28 22:07:39,535 [INFO] DiscordBot: ✅ Bot logged in as Legend's Agent(Ping me question)#0564
+2026-03-28 22:07:39,536 [INFO] DiscordBot: 📊 Connected to 1 server(s)
+2026-03-28 22:07:40,093 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 22:07:40,093 [INFO] DiscordBot: 📌 Message ID: 1487453122245955584 | Content: 'do u know who am i ,and what i want'
+2026-03-28 22:07:40,093 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487453122245955584 | User: legend2k26 | Channel: order-1802a884 | Content: 'do u know who am i ,and what i want'
+2026-03-28 22:07:40,504 [INFO] DiscordBot: 🔍 RAG retrieval for: do u know who am i ,and what i...
+2026-03-28 22:07:40,562 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:07:40,562 [INFO] DiscordBot: 🔄 Calling DeepSeek for: do u know who am i ,and what i...
+2026-03-28 22:07:42,982 [INFO] DiscordBot: ✅ DeepSeek reply (120 chars): I don't have your info yet! 😅 What NBA 2K26 servic...
+2026-03-28 22:07:42,984 [INFO] DiscordBot: ✅ AI reply: do u know who am i ,and what i... -> I don't have your info yet! 😅 ...
+2026-03-28 22:07:42,984 [INFO] DiscordBot: 📤 Sending reply (120 chars): I don't have your info yet! 😅 What NBA 2K26 servic...
+2026-03-28 22:07:43,355 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 120) | MsgID: 1487453122245955584
+2026-03-28 22:09:44,033 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 22:09:44,034 [INFO] DiscordBot: 📌 Message ID: 1487453642184200376 | Content: 'im the ower of the legend2k server'
+2026-03-28 22:09:44,034 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487453642184200376 | User: legend2k26 | Channel: order-1802a884 | Content: 'im the ower of the legend2k server'
+2026-03-28 22:09:44,626 [INFO] DiscordBot: 🔍 RAG retrieval for: im the ower of the legend2k se...
+2026-03-28 22:09:44,669 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:09:44,669 [INFO] DiscordBot: 🔄 Calling DeepSeek for: im the ower of the legend2k se...
+2026-03-28 22:09:46,719 [INFO] DiscordBot: ✅ DeepSeek reply (146 chars): Ah, welcome boss! 👋 I'm here to help your customer...
+2026-03-28 22:09:46,720 [INFO] DiscordBot: ✅ AI reply: im the ower of the legend2k se... -> Ah, welcome boss! 👋 I'm here t...
+2026-03-28 22:09:46,720 [INFO] DiscordBot: 📤 Sending reply (146 chars): Ah, welcome boss! 👋 I'm here to help your customer...
+2026-03-28 22:09:47,206 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 146) | MsgID: 1487453642184200376

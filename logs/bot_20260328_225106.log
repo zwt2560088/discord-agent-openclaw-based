@@ -1,0 +1,224 @@
+Python-dotenv could not parse statement starting at line 5
+2026-03-28 22:51:12,257 [WARNING] dotenv.main: Python-dotenv could not parse statement starting at line 5
+2026-03-28 22:51:12,260 [INFO] DiscordBot: ✅ SQLite database initialized (contexts + user_memory)
+2026-03-28 22:51:12,265 [INFO] DiscordBot: AI Services: OpenAI=True, DeepSeek=True, ReAct=True
+2026-03-28 22:51:19,279 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-03-28 22:51:24,229 [INFO] DiscordBot: ✅ RAG Agent initialized successfully
+2026-03-28 22:51:24,777 [INFO] DiscordBot: 🔧 ReAct Agent using DeepSeek
+2026-03-28 22:51:24,777 [ERROR] DiscordBot: ❌ ReAct Agent initialization failed: Prompt missing required variables: {'agent_scratchpad'}
+Traceback (most recent call last):
+  File "/Users/zhaowentao/IdeaProjects/discord-agent-openclaw-based/src/discord_bot_final.py", line 958, in _init_react_agent
+    self._react_agent = create_react_agent(llm, tools, react_prompt)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/langchain/agents/react/agent.py", line 123, in create_react_agent
+    raise ValueError(f"Prompt missing required variables: {missing_vars}")
+ValueError: Prompt missing required variables: {'agent_scratchpad'}
+2026-03-28 22:51:24,779 [INFO] DiscordBot: ✅ LangChain ReAct Agent initialized successfully
+2026-03-28 22:51:24,779 [INFO] DiscordBot: 🚀 Starting Discord Bot (Final Optimized Version)...
+2026-03-28 22:51:24,780 [INFO] DiscordBot: 🌐 Proxy configured: http://127.0.0.1:8890
+2026-03-28 22:51:24,780 [WARNING] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-28 22:51:24,780 [WARNING] discord.client: davey is not installed, voice will NOT be supported
+2026-03-28 22:51:24,781 [INFO] discord.client: logging in using static token
+2026-03-28 22:51:27,203 [INFO] discord.gateway: Shard ID None has connected to Gateway (Session ID: d0e5e8b3ab746179bfa8a0a74e390306).
+2026-03-28 22:51:29,235 [INFO] DiscordBot: ✅ Bot logged in as Legend's Agent(Ping me question)#0564
+2026-03-28 22:51:29,236 [INFO] DiscordBot: 📊 Connected to 1 server(s)
+2026-03-28 22:51:31,907 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #ord1774674913-2k26-legend2k26-pending
+2026-03-28 22:51:31,908 [INFO] DiscordBot: 📌 Message ID: 1487464160546525293 | Content: 'yo'
+2026-03-28 22:51:31,908 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487464160546525293 | User: legend2k26 | Channel: ord1774674913-2k26-legend2k26-pending | Content: 'yo'
+2026-03-28 22:51:34,055 [INFO] DiscordBot: 🔍 RAG retrieval for: yo...
+2026-03-28 22:51:34,086 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:51:34,086 [INFO] DiscordBot: 🔄 Calling DeepSeek for: yo...
+2026-03-28 22:51:36,320 [INFO] DiscordBot: ✅ DeepSeek reply (118 chars): Hey boss! 👋 Your Rep Grind test order is confirmed...
+2026-03-28 22:51:36,322 [INFO] DiscordBot: ✅ AI reply: yo... -> Hey boss! 👋 Your Rep Grind tes...
+2026-03-28 22:51:36,323 [INFO] DiscordBot: 📤 Sending reply (118 chars): Hey boss! 👋 Your Rep Grind test order is confirmed...
+2026-03-28 22:51:36,680 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 118) | MsgID: 1487464160546525293
+2026-03-28 22:51:54,947 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #ord1774674913-2k26-legend2k26-pending
+2026-03-28 22:51:54,947 [INFO] DiscordBot: 📌 Message ID: 1487464257413972158 | Content: 'why u cant make an order channel for me i already paid'
+2026-03-28 22:51:54,947 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487464257413972158 | User: legend2k26 | Channel: ord1774674913-2k26-legend2k26-pending | Content: 'why u cant make an order channel for me i already '
+2026-03-28 22:51:55,462 [INFO] DiscordBot: 🔍 RAG retrieval for: why u cant make an order chann...
+2026-03-28 22:51:55,494 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:51:55,495 [INFO] DiscordBot: 🔄 Calling DeepSeek for: why u cant make an order chann...
+2026-03-28 22:51:58,792 [INFO] DiscordBot: ✅ DeepSeek reply (293 chars): I understand your frustration, boss! 😅 I'm a custo...
+2026-03-28 22:51:58,802 [INFO] DiscordBot: ✅ AI reply: why u cant make an order chann... -> I understand your frustration,...
+2026-03-28 22:51:58,805 [INFO] DiscordBot: 📦 Purchase intent detected: explicit=True, ai_intent=False
+2026-03-28 22:51:58,805 [INFO] DiscordBot: 📝 Added order notice to AI reply (awaiting payment confirmation)
+2026-03-28 22:51:58,805 [INFO] DiscordBot: 📤 Sending reply (628 chars): I understand your frustration, boss! 😅 I'm a custo...
+2026-03-28 22:51:59,249 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 628) | MsgID: 1487464257413972158
+2026-03-28 22:53:00,873 [ERROR] discord.ext.commands.bot: Ignoring exception in command confirm-payment
+Traceback (most recent call last):
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/bot.py", line 1376, in invoke
+    await ctx.command.invoke(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 1056, in invoke
+    await self.prepare(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 973, in prepare
+    await self._parse_arguments(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 880, in _parse_arguments
+    transformed = await self.transform(ctx, param, attachments)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 732, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: user is a required argument that is missing.
+2026-03-28 22:53:10,836 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #ord1774674913-2k26-legend2k26-pending
+2026-03-28 22:53:10,837 [INFO] DiscordBot: 📌 Message ID: 1487464576160370709 | Content: 'bro?'
+2026-03-28 22:53:10,837 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487464576160370709 | User: legend2k26 | Channel: ord1774674913-2k26-legend2k26-pending | Content: 'bro?'
+2026-03-28 22:53:11,473 [INFO] DiscordBot: 🔍 RAG retrieval for: bro?...
+2026-03-28 22:53:11,527 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:53:11,527 [INFO] DiscordBot: 🔄 Calling DeepSeek for: bro?...
+2026-03-28 22:53:14,054 [INFO] DiscordBot: ✅ DeepSeek reply (143 chars): Hey boss! 👋
+
+Your Rep Grind order is **confirmed a...
+2026-03-28 22:53:14,055 [INFO] DiscordBot: ✅ AI reply: bro?... -> Hey boss! 👋
+
+Your Rep Grind or...
+2026-03-28 22:53:14,061 [INFO] DiscordBot: 📤 Sending reply (143 chars): Hey boss! 👋
+
+Your Rep Grind order is **confirmed a...
+2026-03-28 22:53:14,473 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 143) | MsgID: 1487464576160370709
+2026-03-28 22:53:32,533 [ERROR] discord.ext.commands.bot: Ignoring exception in command confirm-payment
+Traceback (most recent call last):
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/bot.py", line 1376, in invoke
+    await ctx.command.invoke(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 1056, in invoke
+    await self.prepare(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 973, in prepare
+    await self._parse_arguments(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 880, in _parse_arguments
+    transformed = await self.transform(ctx, param, attachments)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 732, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: user is a required argument that is missing.
+2026-03-28 22:53:44,784 [ERROR] discord.ext.commands.bot: Ignoring exception in command confirm-payment
+Traceback (most recent call last):
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/bot.py", line 1376, in invoke
+    await ctx.command.invoke(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 1056, in invoke
+    await self.prepare(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 973, in prepare
+    await self._parse_arguments(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 880, in _parse_arguments
+    transformed = await self.transform(ctx, param, attachments)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 750, in transform
+    return await run_converters(ctx, converter, argument, param)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 1466, in run_converters
+    return await _actual_conversion(ctx, converter, argument, param)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 1350, in _actual_conversion
+    return await converter().convert(ctx, argument)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 343, in convert
+    raise UserNotFound(argument)
+discord.ext.commands.errors.UserNotFound: User "<@&1483452369072029910>" not found.
+2026-03-28 22:53:57,474 [ERROR] discord.ext.commands.bot: Ignoring exception in command confirm-payment
+Traceback (most recent call last):
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/bot.py", line 1376, in invoke
+    await ctx.command.invoke(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 1056, in invoke
+    await self.prepare(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 973, in prepare
+    await self._parse_arguments(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 880, in _parse_arguments
+    transformed = await self.transform(ctx, param, attachments)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 750, in transform
+    return await run_converters(ctx, converter, argument, param)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 1466, in run_converters
+    return await _actual_conversion(ctx, converter, argument, param)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 1350, in _actual_conversion
+    return await converter().convert(ctx, argument)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 343, in convert
+    raise UserNotFound(argument)
+discord.ext.commands.errors.UserNotFound: User "@客户" not found.
+2026-03-28 22:54:05,671 [ERROR] discord.ext.commands.bot: Ignoring exception in command confirm-payment
+Traceback (most recent call last):
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/bot.py", line 1376, in invoke
+    await ctx.command.invoke(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 1056, in invoke
+    await self.prepare(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 973, in prepare
+    await self._parse_arguments(ctx)
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 880, in _parse_arguments
+    transformed = await self.transform(ctx, param, attachments)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/core.py", line 750, in transform
+    return await run_converters(ctx, converter, argument, param)  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 1466, in run_converters
+    return await _actual_conversion(ctx, converter, argument, param)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 1350, in _actual_conversion
+    return await converter().convert(ctx, argument)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/discord/ext/commands/converter.py", line 343, in convert
+    raise UserNotFound(argument)
+discord.ext.commands.errors.UserNotFound: User "<@&1483452369072029910>" not found.
+2026-03-28 22:54:58,810 [INFO] DiscordBot: ✅ Message accepted: @ysfotp in #ticket-1381
+2026-03-28 22:54:58,810 [INFO] DiscordBot: 📌 Message ID: 1487465028633366580 | Content: 'Is the build already maxed out or i got to pay for attributes'
+2026-03-28 22:54:58,810 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487465028633366580 | User: ysfotp | Channel: ticket-1381 | Content: 'Is the build already maxed out or i got to pay for'
+2026-03-28 22:54:59,589 [INFO] DiscordBot: 🔍 RAG retrieval for: Is the build already maxed out...
+2026-03-28 22:54:59,613 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:54:59,614 [INFO] DiscordBot: 🔄 Calling DeepSeek for: Is the build already maxed out...
+2026-03-28 22:55:03,355 [INFO] DiscordBot: ✅ DeepSeek reply (219 chars): Hey! 😊 The build comes **maxed out** with all attr...
+2026-03-28 22:55:03,422 [INFO] DiscordBot: ✅ AI reply: Is the build already maxed out... -> Hey! 😊 The build comes **maxed...
+2026-03-28 22:55:03,451 [INFO] DiscordBot: 📤 Sending reply (219 chars): Hey! 😊 The build comes **maxed out** with all attr...
+2026-03-28 22:55:03,852 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 219) | MsgID: 1487465028633366580
+2026-03-28 22:57:25,903 [INFO] DiscordBot: ✅ Message accepted: @meerskii3 in #ticket-1300
+2026-03-28 22:57:25,908 [INFO] DiscordBot: 📌 Message ID: 1487465645980258456 | Content: 'https://tenor.com/view/dumbass-butt-head-mike-judge%27s-beavis-and-butt-head-s2-e4-stupid-gif-14074228603224192990'
+2026-03-28 22:57:25,911 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487465645980258456 | User: meerskii3 | Channel: ticket-1300 | Content: 'https://tenor.com/view/dumbass-butt-head-mike-judg'
+2026-03-28 22:57:26,934 [INFO] DiscordBot: 🔍 RAG retrieval for: https://tenor.com/view/dumbass...
+2026-03-28 22:57:26,959 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:57:26,959 [INFO] DiscordBot: 🔄 Calling DeepSeek for: https://tenor.com/view/dumbass...
+2026-03-28 22:57:30,206 [INFO] DiscordBot: ✅ DeepSeek reply (182 chars): Hey there! 😄 I see you shared a funny gif, but I'm...
+2026-03-28 22:57:30,209 [INFO] DiscordBot: ✅ AI reply: https://tenor.com/view/dumbass... -> Hey there! 😄 I see you shared ...
+2026-03-28 22:57:30,212 [INFO] DiscordBot: 📤 Sending reply (182 chars): Hey there! 😄 I see you shared a funny gif, but I'm...
+2026-03-28 22:57:30,652 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 182) | MsgID: 1487465645980258456
+2026-03-28 22:57:56,920 [INFO] DiscordBot: ✅ Message accepted: @quantaviusmybeloved in #ticket-1364
+2026-03-28 22:57:56,921 [INFO] DiscordBot: 📌 Message ID: 1487465776028848259 | Content: 'so have like 200 hrs to be rlly safe but 150 is still kinda safe?'
+2026-03-28 22:57:56,921 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487465776028848259 | User: quantaviusmybeloved | Channel: ticket-1364 | Content: 'so have like 200 hrs to be rlly safe but 150 is st'
+2026-03-28 22:57:57,645 [INFO] DiscordBot: 🔍 RAG retrieval for: so have like 200 hrs to be rll...
+2026-03-28 22:57:57,672 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:57:57,672 [INFO] DiscordBot: 🔄 Calling DeepSeek for: so have like 200 hrs to be rll...
+2026-03-28 22:57:57,751 [INFO] DiscordBot: ✅ Message accepted: @ysfotp in #ticket-1381
+2026-03-28 22:57:57,751 [INFO] DiscordBot: 📌 Message ID: 1487465779690606682 | Content: 'Maxed badges too?'
+2026-03-28 22:57:57,751 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487465779690606682 | User: ysfotp | Channel: ticket-1381 | Content: 'Maxed badges too?'
+2026-03-28 22:57:58,205 [INFO] DiscordBot: 🔍 RAG retrieval for: Maxed badges too?...
+2026-03-28 22:57:58,227 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:57:58,227 [INFO] DiscordBot: 🔄 Calling DeepSeek for: Maxed badges too?...
+2026-03-28 22:57:58,447 [INFO] DiscordBot: ✅ Message accepted: @quantaviusmybeloved in #ticket-1364
+2026-03-28 22:57:58,447 [INFO] DiscordBot: 📌 Message ID: 1487465782492397690 | Content: 'or is it safe'
+2026-03-28 22:57:58,447 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487465782492397690 | User: quantaviusmybeloved | Channel: ticket-1364 | Content: 'or is it safe'
+2026-03-28 22:57:59,025 [INFO] DiscordBot: 🔍 RAG retrieval for: or is it safe...
+2026-03-28 22:57:59,060 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:57:59,060 [INFO] DiscordBot: 🔄 Calling DeepSeek for: or is it safe...
+2026-03-28 22:58:00,750 [INFO] DiscordBot: ✅ DeepSeek reply (162 chars): Yes! 🎮  
+200+ hours is **very safe** ✅  
+150 hours...
+2026-03-28 22:58:00,754 [INFO] DiscordBot: ✅ AI reply: so have like 200 hrs to be rll... -> Yes! 🎮  
+200+ hours is **very ...
+2026-03-28 22:58:00,757 [INFO] DiscordBot: 📤 Sending reply (162 chars): Yes! 🎮  
+200+ hours is **very safe** ✅  
+150 hours...
+2026-03-28 22:58:01,170 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 162) | MsgID: 1487465776028848259
+2026-03-28 22:58:01,205 [INFO] DiscordBot: ✅ DeepSeek reply (174 chars): Yes! ✅ The build comes **maxed out with all badges...
+2026-03-28 22:58:01,206 [INFO] DiscordBot: ✅ AI reply: Maxed badges too?... -> Yes! ✅ The build comes **maxed...
+2026-03-28 22:58:01,208 [INFO] DiscordBot: 📤 Sending reply (174 chars): Yes! ✅ The build comes **maxed out with all badges...
+2026-03-28 22:58:01,608 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 174) | MsgID: 1487465779690606682
+2026-03-28 22:58:03,525 [INFO] DiscordBot: ✅ DeepSeek reply (381 chars): Based on your history, you're asking about safety ...
+2026-03-28 22:58:03,526 [INFO] DiscordBot: ✅ AI reply: or is it safe... -> Based on your history, you're ...
+2026-03-28 22:58:03,527 [INFO] DiscordBot: 📤 Sending reply (381 chars): Based on your history, you're asking about safety ...
+2026-03-28 22:58:03,930 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 381) | MsgID: 1487465782492397690
+2026-03-28 22:58:16,897 [INFO] DiscordBot: ✅ Message accepted: @ysfotp in #ticket-1381
+2026-03-28 22:58:16,898 [INFO] DiscordBot: 📌 Message ID: 1487465859931963413 | Content: 'With workout warrior?'
+2026-03-28 22:58:16,898 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487465859931963413 | User: ysfotp | Channel: ticket-1381 | Content: 'With workout warrior?'
+2026-03-28 22:58:17,437 [INFO] DiscordBot: 🔍 RAG retrieval for: With workout warrior?...
+2026-03-28 22:58:17,476 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 22:58:17,476 [INFO] DiscordBot: 🔄 Calling DeepSeek for: With workout warrior?...
+2026-03-28 22:58:20,542 [INFO] DiscordBot: ✅ DeepSeek reply (167 chars): Yes! ✅ The build includes **Workout Warrior** badg...
+2026-03-28 22:58:20,544 [INFO] DiscordBot: ✅ AI reply: With workout warrior?... -> Yes! ✅ The build includes **Wo...
+2026-03-28 22:58:20,547 [INFO] DiscordBot: 📤 Sending reply (167 chars): Yes! ✅ The build includes **Workout Warrior** badg...
+2026-03-28 22:58:21,197 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 167) | MsgID: 1487465859931963413

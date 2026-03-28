@@ -1,0 +1,24 @@
+2026-03-28 21:50:52,625 [WARNING] dotenv.main: Python-dotenv could not parse statement starting at line 5
+2026-03-28 21:50:52,629 [INFO] DiscordBot: ✅ SQLite context database initialized
+2026-03-28 21:50:52,631 [INFO] DiscordBot: AI Services: OpenAI=True, DeepSeek=True, ReAct=True
+2026-03-28 21:50:59,099 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-03-28 21:51:04,534 [INFO] DiscordBot: ✅ RAG Agent initialized successfully
+2026-03-28 21:51:04,787 [INFO] DiscordBot: 🔧 ReAct Agent using DeepSeek
+2026-03-28 21:51:04,787 [ERROR] DiscordBot: ❌ ReAct Agent initialization failed: Prompt missing required variables: {'agent_scratchpad'}
+Traceback (most recent call last):
+  File "/Users/zhaowentao/IdeaProjects/discord-agent-openclaw-based/src/discord_bot_final.py", line 641, in _init_react_agent
+    self._react_agent = create_react_agent(llm, tools, react_prompt)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/langchain/agents/react/agent.py", line 123, in create_react_agent
+    raise ValueError(f"Prompt missing required variables: {missing_vars}")
+ValueError: Prompt missing required variables: {'agent_scratchpad'}
+2026-03-28 21:51:04,788 [INFO] DiscordBot: ✅ LangChain ReAct Agent initialized successfully
+2026-03-28 21:51:04,788 [INFO] DiscordBot: 🚀 Starting Discord Bot (Final Optimized Version)...
+2026-03-28 21:51:04,789 [INFO] DiscordBot: 🌐 Proxy configured: http://127.0.0.1:8890
+2026-03-28 21:51:04,789 [WARNING] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-28 21:51:04,789 [WARNING] discord.client: davey is not installed, voice will NOT be supported
+2026-03-28 21:51:04,790 [INFO] discord.client: logging in using static token
+2026-03-28 21:51:07,025 [INFO] discord.gateway: Shard ID None has connected to Gateway (Session ID: a6e2f82490e9048bc5124d05735fad2d).
+2026-03-28 21:51:09,078 [INFO] DiscordBot: ✅ Bot logged in as Legend's Agent(Ping me question)#0564
+2026-03-28 21:51:09,080 [INFO] DiscordBot: 📊 Connected to 1 server(s)
+2026-03-28 21:51:09,227 [INFO] DiscordBot: 👤 Admin message recorded (no reply): @legend2k26: >?...

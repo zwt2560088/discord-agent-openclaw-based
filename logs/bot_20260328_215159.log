@@ -1,0 +1,88 @@
+2026-03-28 21:52:02,837 [WARNING] dotenv.main: Python-dotenv could not parse statement starting at line 5
+2026-03-28 21:52:02,842 [INFO] DiscordBot: ✅ SQLite context database initialized
+2026-03-28 21:52:02,845 [INFO] DiscordBot: AI Services: OpenAI=True, DeepSeek=True, ReAct=True
+2026-03-28 21:52:11,888 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-03-28 21:52:16,308 [INFO] DiscordBot: ✅ RAG Agent initialized successfully
+2026-03-28 21:52:16,587 [INFO] DiscordBot: 🔧 ReAct Agent using DeepSeek
+2026-03-28 21:52:16,587 [ERROR] DiscordBot: ❌ ReAct Agent initialization failed: Prompt missing required variables: {'agent_scratchpad'}
+Traceback (most recent call last):
+  File "/Users/zhaowentao/IdeaProjects/discord-agent-openclaw-based/src/discord_bot_final.py", line 641, in _init_react_agent
+    self._react_agent = create_react_agent(llm, tools, react_prompt)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/langchain/agents/react/agent.py", line 123, in create_react_agent
+    raise ValueError(f"Prompt missing required variables: {missing_vars}")
+ValueError: Prompt missing required variables: {'agent_scratchpad'}
+2026-03-28 21:52:16,589 [INFO] DiscordBot: ✅ LangChain ReAct Agent initialized successfully
+2026-03-28 21:52:16,589 [INFO] DiscordBot: 🚀 Starting Discord Bot (Final Optimized Version)...
+2026-03-28 21:52:16,589 [INFO] DiscordBot: 🌐 Proxy configured: http://127.0.0.1:8890
+2026-03-28 21:52:16,590 [WARNING] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-28 21:52:16,590 [WARNING] discord.client: davey is not installed, voice will NOT be supported
+2026-03-28 21:52:16,590 [INFO] discord.client: logging in using static token
+2026-03-28 21:52:18,718 [INFO] discord.gateway: Shard ID None has connected to Gateway (Session ID: 1f9dbd527c540ab63dba2986b86fec70).
+2026-03-28 21:52:20,749 [INFO] DiscordBot: ✅ Bot logged in as Legend's Agent(Ping me question)#0564
+2026-03-28 21:52:20,750 [INFO] DiscordBot: 📊 Connected to 1 server(s)
+2026-03-28 21:52:24,842 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:52:24,843 [INFO] DiscordBot: 📌 Message ID: 1487449283752886453 | Content: '你傻逼'
+2026-03-28 21:52:24,843 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487449283752886453 | User: legend2k26 | Channel: order-1802a884 | Content: '你傻逼'
+2026-03-28 21:52:25,291 [INFO] DiscordBot: 🔍 RAG retrieval for: 你傻逼...
+2026-03-28 21:52:25,343 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 21:52:25,344 [INFO] DiscordBot: 🔄 Calling DeepSeek for: 你傻逼...
+2026-03-28 21:52:27,455 [INFO] DiscordBot: ✅ DeepSeek reply (92 chars): I can only discuss NBA 2K26 boosting services. 😊 H...
+2026-03-28 21:52:27,457 [INFO] DiscordBot: ✅ AI reply: 你傻逼... -> I can only discuss NBA 2K26 bo...
+2026-03-28 21:52:27,457 [INFO] DiscordBot: 📤 Sending reply (92 chars): I can only discuss NBA 2K26 boosting services. 😊 H...
+2026-03-28 21:52:27,882 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 92) | MsgID: 1487449283752886453
+2026-03-28 21:52:40,681 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:52:40,682 [INFO] DiscordBot: 📌 Message ID: 1487449350379409649 | Content: 'rep'
+2026-03-28 21:52:40,682 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487449350379409649 | User: legend2k26 | Channel: order-1802a884 | Content: 'rep'
+2026-03-28 21:52:41,093 [INFO] DiscordBot: 🔍 RAG retrieval for: rep...
+2026-03-28 21:52:41,113 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 21:52:41,113 [INFO] DiscordBot: 🔄 Calling DeepSeek for: rep...
+2026-03-28 21:52:42,944 [INFO] DiscordBot: ✅ DeepSeek reply (69 chars): Do you want Rep Grind (level boost $35-150) or Rep...
+2026-03-28 21:52:42,946 [INFO] DiscordBot: ✅ AI reply: rep... -> Do you want Rep Grind (level b...
+2026-03-28 21:52:42,946 [INFO] DiscordBot: 📤 Sending reply (69 chars): Do you want Rep Grind (level boost $35-150) or Rep...
+2026-03-28 21:52:43,291 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 69) | MsgID: 1487449350379409649
+2026-03-28 21:52:48,813 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:52:48,813 [INFO] DiscordBot: 📌 Message ID: 1487449384261128194 | Content: 'rep sleeve'
+2026-03-28 21:52:48,814 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487449384261128194 | User: legend2k26 | Channel: order-1802a884 | Content: 'rep sleeve'
+2026-03-28 21:52:49,217 [INFO] DiscordBot: ⚡ Quick match: 'sleeve' in 'rep sleeve'
+2026-03-28 21:52:49,217 [INFO] DiscordBot: ⚡ Quick reply: rep sleeve... -> 🎯 **Rep Sleeve Pricing**
+💰 50x...
+2026-03-28 21:52:49,217 [INFO] DiscordBot: 📦 Purchase intent detected: explicit=False, ai_intent=True
+2026-03-28 21:52:49,217 [INFO] DiscordBot: 📝 Added order notice to AI reply (awaiting payment confirmation)
+2026-03-28 21:52:49,217 [INFO] DiscordBot: 📤 Sending reply (567 chars): 🎯 **Rep Sleeve Pricing**
+💰 50x Rep Sleeve: $15 | 5...
+2026-03-28 21:52:49,567 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 567) | MsgID: 1487449384261128194
+2026-03-28 21:53:22,396 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:53:22,397 [INFO] DiscordBot: 📌 Message ID: 1487449525340733591 | Content: 'i want to use paypal'
+2026-03-28 21:53:22,397 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487449525340733591 | User: legend2k26 | Channel: order-1802a884 | Content: 'i want to use Paypal'
+2026-03-28 21:53:22,944 [INFO] DiscordBot: 🔍 RAG retrieval for: i want to use Paypal...
+2026-03-28 21:53:22,958 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 21:53:22,958 [INFO] DiscordBot: 🔄 Calling DeepSeek for: i want to use Paypal...
+2026-03-28 21:53:25,853 [INFO] DiscordBot: ✅ DeepSeek reply (171 chars): Perfect! 💳 PayPal is accepted. 
+
+Which Rep Sleeve ...
+2026-03-28 21:53:25,854 [INFO] DiscordBot: ✅ AI reply: i want to use Paypal... -> Perfect! 💳 PayPal is accepted....
+2026-03-28 21:53:25,854 [INFO] DiscordBot: 📤 Sending reply (171 chars): Perfect! 💳 PayPal is accepted. 
+
+Which Rep Sleeve ...
+2026-03-28 21:53:26,279 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 171) | MsgID: 1487449525340733591
+2026-03-28 21:53:31,438 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:53:31,438 [INFO] DiscordBot: 📌 Message ID: 1487449563236139039 | Content: '50x'
+2026-03-28 21:53:31,439 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487449563236139039 | User: legend2k26 | Channel: order-1802a884 | Content: '50x'
+2026-03-28 21:53:31,822 [INFO] DiscordBot: ⚡ Quick match: '50x' in '50x'
+2026-03-28 21:53:31,822 [INFO] DiscordBot: ⚡ Quick reply: 50x... -> ✅ **50x Rep Sleeve**
+💰 Options...
+2026-03-28 21:53:31,822 [INFO] DiscordBot: 📤 Sending reply (206 chars): ✅ **50x Rep Sleeve**
+💰 Options:
+• **50x Rep Sleeve...
+2026-03-28 21:53:32,171 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 206) | MsgID: 1487449563236139039
+2026-03-28 21:53:41,195 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:53:41,195 [INFO] DiscordBot: 📌 Message ID: 1487449604168618184 | Content: '50x + lvl40'
+2026-03-28 21:53:41,195 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487449604168618184 | User: legend2k26 | Channel: order-1802a884 | Content: '50x + lvl40'
+2026-03-28 21:53:41,677 [INFO] DiscordBot: ⚡ Quick match: '50x' in '50x + lvl40'
+2026-03-28 21:53:41,677 [INFO] DiscordBot: ⚡ Quick reply: 50x + lvl40... -> ✅ **50x Rep Sleeve**
+💰 Options...
+2026-03-28 21:53:41,677 [INFO] DiscordBot: 📤 Sending reply (206 chars): ✅ **50x Rep Sleeve**
+💰 Options:
+• **50x Rep Sleeve...
+2026-03-28 21:53:42,256 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 206) | MsgID: 1487449604168618184

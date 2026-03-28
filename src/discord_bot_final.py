@@ -25,6 +25,9 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Tuple
 
+# 全局 bot 缓存（供工具函数访问 guild/channel）
+_bot_cache = []
+
 # 订单数据库
 try:
     from database import Database as OrderDatabase
@@ -725,6 +728,59 @@ if LANGCHAIN_AVAILABLE:
         return f"✅ Payment mentioned but no specific service matched in: \"{order_details}\". Admin please run: `!confirm-payment @USER <amount> \"<service>\"` with correct details."
 
     @tool
+    def send_payment_confirmation(user_id: str, amount: float, service_desc: str, channel_id: str) -> str:
+        """
+        在咨询频道发送支付确认请求消息（带确认按钮），管理员点击后自动创建订单。
+        当用户明确表达购买意图（如 "I want to buy", "order now", "let's go" 等）后调用此工具。
+        参数:
+        - user_id: 客户 Discord 用户 ID
+        - amount: 订单金额（数字）
+        - service_desc: 服务描述（如 "50x Rep Sleeve + Level 40"）
+        - channel_id: 当前频道 ID
+        """
+        try:
+            # 异步发送消息（在事件循环中调度）
+            loop = asyncio.get_event_loop()
+
+            async def _send():
+                # 需要 bot 实例 — 从全局获取
+                for g in _bot_cache:
+                    ch = g.get_channel(int(channel_id))
+                    if ch:
+                        break
+                else:
+                    return "Channel not found."
+
+                user = ch.guild.get_member(int(user_id))
+                if not user:
+                    return f"User {user_id} not found in this server."
+
+                view = PaymentConfirmView(
+                    customer_id=int(user_id),
+                    service_desc=service_desc,
+                    amount=float(amount)
+                )
+                embed = discord.Embed(
+                    title="💳 Pending Payment Confirmation",
+                    description=f"Admin: Please verify payment and confirm below.",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(name="Customer", value=user.mention, inline=True)
+                embed.add_field(name="Service", value=service_desc, inline=False)
+                embed.add_field(name="Amount", value=f"${float(amount):.2f}", inline=True)
+                embed.set_footer(text="⏰ Buttons expire in 2 hours | Admins only")
+                await ch.send(embed=embed, view=view)
+                return f"Sent payment confirmation request for {user.name} in {ch.mention}."
+
+            if loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(_send(), loop)
+                return future.result(timeout=10)
+            else:
+                return loop.run_until_complete(_send())
+        except Exception as e:
+            return f"Failed to send payment confirmation: {str(e)}"
+
+    @tool
     def query_knowledge(query: str) -> str:
         """
         从 RAG 知识库或本地文件查询信息。
@@ -863,7 +919,7 @@ class AIService:
                 logger.info("🔧 ReAct Agent using OpenAI")
 
             # 收集所有工具
-            tools = [get_price, confirm_payment, query_knowledge, check_order_status]
+            tools = [get_price, confirm_payment, query_knowledge, check_order_status, send_payment_confirmation]
 
             # 创建 ReAct prompt
             react_prompt = PromptTemplate.from_template("""You are an intelligent NBA 2K26 customer service assistant with COMPLETE MEMORY of every user's past interactions.
@@ -877,6 +933,8 @@ IMPORTANT RULES:
 6. When calling confirm_payment, include ALL relevant service details from the current message AND conversation history
 7. Always be concise and friendly, include emojis
 8. Messages tagged with [ADMIN] are from the shop owner — use as context but DO NOT address the admin directly
+9. When user expresses clear purchase intent ("I want to buy", "let's do it", "order now", "I'll take it", "let's go") → After providing price with get_price, use send_payment_confirmation to send a payment confirmation button to admin
+10. When using send_payment_confirmation, you MUST pass the user_id (from USER HISTORY), amount (total price), service_desc, and channel_id (current channel)
 
 PAYMENT CONFIRMATION FLOW (CRITICAL):
 When someone says they paid or confirms payment:
@@ -886,6 +944,12 @@ Step 3: The tool returns the total and a command like: `!confirm-payment @USER <
 Step 4: Your Final Answer MUST include this command so the admin can execute it to create the fulfillment channel
 Step 5: NEVER say "I can't create channels" or "I don't have ability" — the admin runs the command, not you
 Step 6: After using confirm_payment tool, ALWAYS append [ORDER_INFO:service=<service name>,amount=<total price>] to your Final Answer — this triggers the payment confirmation buttons for admin
+
+PURCHASE INTENT FLOW (when user wants to BUY but hasn't paid yet):
+Step 1: Use get_price to provide the price
+Step 2: If user confirms they want to proceed ("yes", "let's do it", "order now", "I'll take it"), use send_payment_confirmation with user_id, amount, service_desc, and channel_id
+Step 3: This sends a message with payment confirmation buttons that admin can click
+Step 4: Tell the user the admin will confirm and create their order channel
 
 UNDERSTANDING USER INTENT:
 - "50x + lvl40" → User wants to BUY 50x Rep Sleeve + Level 40 combo → Use get_price("50x rep sleeve", "lvl40")
@@ -958,6 +1022,42 @@ Observation: User has past interactions: asked about 50x rep sleeve, ordered bad
 Thought: I now know the final answer.
 Final Answer: Of course! 🎮 You previously asked about 50x Rep Sleeve and ordered Badge Unlock. How can I help you today?
 
+Example 6 - Purchase intent (user wants to buy):
+Question: I want to buy 50x rep sleeve
+Thought: User wants to purchase 50x rep sleeve. I should check the price first.
+Action: get_price
+Action Input: 50x rep sleeve
+Observation: 50x Rep Sleeve: **$15**
+Thought: I have the price ($15). The user wants to buy. I should send payment confirmation.
+Action: send_payment_confirmation
+Action Input: user_id=<user_id from history>, amount=15, service_desc="50x Rep Sleeve", channel_id=<current channel_id>
+Observation: Sent payment confirmation request for User in #channel.
+Thought: I now know the final answer.
+Final Answer: ✅ **50x Rep Sleeve: $15** 🎯
+
+I've sent a payment confirmation request! 💳 Please complete the payment, and the admin will confirm and create your order channel shortly.
+
+🔗 G2G Store: https://www.g2g.com/cn/categories/nba-dunk-items?seller=LegendNBA2k
+
+Example 7 - Combo purchase intent:
+Question: let's do 250 challenge + all 5 specialties + 50x
+Thought: User wants to buy a combo. I should check the total price first.
+Action: get_price
+Action Input: 250 challenge all 5 specialties 50x
+Observation: 250 Layers Challenge: **$40** | All 5 Specialties: **$20** | 50x Rep Sleeve: **$15**
+💰 Combo Total: $75
+Thought: Total is $75. User confirmed purchase intent ("let's do"). I should send payment confirmation.
+Action: send_payment_confirmation
+Action Input: user_id=<user_id from history>, amount=75, service_desc="250 Layers Challenge + All 5 Specialties + 50x Rep Sleeve", channel_id=<current channel_id>
+Observation: Sent payment confirmation request.
+Thought: I now know the final answer.
+Final Answer: ✅ **Combo Order: $75** 🎯
+• 250 Layers Challenge: $40
+• All 5 Specialties: $20
+• 50x Rep Sleeve: $15
+
+I've sent the payment confirmation! 💳 Complete payment and the admin will create your order channel.
+
 Available tools:
 {tools}
 
@@ -991,7 +1091,7 @@ Thought:{{agent_scratchpad}}""")
             self._react_agent = None
             self._agent_executor = None
 
-    async def _call_react_agent(self, user_msg: str, channel_id: str, chat_history: List[Dict], user_memory_summary: str = "") -> Tuple[str, bool]:
+    async def _call_react_agent(self, user_msg: str, channel_id: str, chat_history: List[Dict], user_memory_summary: str = "", user_id: str = "") -> Tuple[str, bool]:
         """
         使用 LangChain ReAct Agent 处理用户消息
         返回: (回复内容, 是否有订单意图)
@@ -1002,6 +1102,10 @@ Thought:{{agent_scratchpad}}""")
         try:
             # 构建历史上下文字符串（最近 6 条消息，完整内容）
             history_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in chat_history[-6:]])
+
+            # 注入当前用户 ID 和频道 ID（供 send_payment_confirmation 使用）
+            if user_id:
+                history_str = f"[CURRENT_USER_ID: {user_id}] [CURRENT_CHANNEL_ID: {channel_id}]\n\n{history_str}"
 
             # 如果有用户完整历史，附加到历史上下文
             if user_memory_summary:
@@ -1098,7 +1202,7 @@ Thought:{{agent_scratchpad}}""")
                 logger.warning(f"⚠️ Failed to get context: {e}")
                 history = []
 
-            react_reply, react_intent = await self._call_react_agent(user_msg, channel_id, history, user_memory_summary=user_memory_summary)
+            react_reply, react_intent = await self._call_react_agent(user_msg, channel_id, history, user_memory_summary=user_memory_summary, user_id=user_id)
             if react_reply:  # ReAct Agent 成功处理
                 try:
                     await context_manager.save_context(channel_id, user_msg, react_reply)
@@ -1455,6 +1559,154 @@ class OrderControlView(discord.ui.View):
         logger.info(f"📦 Order {self.order_id} status → cancelled (by {interaction.user.name})")
 
 
+async def create_order_from_confirmation(
+    guild: discord.Guild,
+    customer_id: int,
+    amount: float,
+    service_desc: str,
+    admin: discord.Member,
+    consulting_channel: discord.TextChannel
+) -> Optional[Tuple[str, discord.TextChannel, discord.Member]]:
+    """
+    从支付确认创建订单的统一函数
+    供 PaymentConfirmView 按钮和 !confirm-payment 命令共用
+    返回: (order_id, fulfillment_channel, customer) 或 None
+    """
+    try:
+        # ========== 1. 生成订单号 ==========
+        if order_db:
+            order_id = order_db.generate_order_id()
+        else:
+            order_id = f"ORD-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+
+        # ========== 2. 获取客户对象 ==========
+        customer = guild.get_member(customer_id)
+        if not customer:
+            logger.error(f"❌ Customer not found: {customer_id}")
+            return None
+
+        # ========== 3. 保存订单到数据库 ==========
+        if order_db:
+            try:
+                order_db.save_order_with_details(
+                    order_id=order_id,
+                    handler_userid=str(customer.id),
+                    amount=amount,
+                    service_desc=service_desc,
+                    confirmed_by=str(admin.id),
+                    consulting_channel_id=str(consulting_channel.id)
+                )
+                logger.info(f"💾 Order {order_id} saved to database")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to save order: {e}")
+
+        # ========== 4. 创建履约频道 ==========
+        fulfillment_channel_name = f"fulfillment-{order_id.lower()}"
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            customer: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            ),
+            guild.me: discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_channels=True
+            )
+        }
+        if admin.id != guild.owner_id:
+            overwrites[admin] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, manage_channels=True
+            )
+        booster_role = discord.utils.get(guild.roles, name="Booster")
+        if booster_role:
+            overwrites[booster_role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            )
+
+        fulfillment_channel = await guild.create_text_channel(
+            name=fulfillment_channel_name,
+            overwrites=overwrites,
+            topic=f"Order: {order_id} | User: {customer.name} | Amount: ${amount} | Status: In Progress"
+        )
+        logger.info(f"✅ Fulfillment channel created: {fulfillment_channel_name}")
+
+        # ========== 5. 更新订单频道信息 ==========
+        if order_db:
+            order_db.update_order_channel(order_id, str(fulfillment_channel.id), fulfillment_channel_name)
+
+        # ========== 6. 发送订单卡片（履约频道）==========
+        order_embed = discord.Embed(
+            title="📦 Order Details",
+            description=f"Welcome {customer.mention}! Your service has been confirmed.",
+            color=discord.Color.gold()
+        )
+        order_embed.add_field(name="Order ID", value=f"`{order_id}`", inline=True)
+        order_embed.add_field(name="Status", value="🟡 Pending", inline=True)
+        order_embed.add_field(name="Service", value=service_desc, inline=False)
+        order_embed.add_field(name="Amount", value=f"${amount:.2f}", inline=True)
+        order_embed.add_field(name="Customer", value=customer.mention, inline=True)
+        order_embed.add_field(name="Confirmed By", value=admin.mention, inline=True)
+        order_embed.add_field(
+            name="Info",
+            value=f"📝 Consulting Channel: {consulting_channel.mention}\n⏱️ Service starts within 10 minutes",
+            inline=False
+        )
+        order_embed.timestamp = discord.utils.utcnow()
+        order_embed.set_footer(text="Use the buttons below to update order status")
+        order_control_view = OrderControlView(order_id)
+        await fulfillment_channel.send(embed=order_embed, view=order_control_view)
+
+        # ========== 7. 迁移咨询频道历史 ==========
+        try:
+            await migrate_history(consulting_channel, fulfillment_channel, limit=20)
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to migrate history: {e}")
+
+        # ========== 8. 在履约频道通知客户 ==========
+        await fulfillment_channel.send(
+            f"🚀 {customer.mention} 您的服务已确认！打手将在 10 分钟内开始。"
+        )
+
+        # ========== 9. 订单看板同步 ==========
+        board_channel = discord.utils.get(guild.text_channels, name="order-board")
+        if board_channel:
+            try:
+                board_embed = discord.Embed(
+                    title=f"📦 {order_id}",
+                    description=f"Service: {service_desc}",
+                    color=discord.Color.gold()
+                )
+                board_embed.add_field(name="Customer", value=customer.mention, inline=True)
+                board_embed.add_field(name="Amount", value=f"${amount:.2f}", inline=True)
+                board_embed.add_field(name="Status", value="🟡 Pending", inline=True)
+                board_embed.add_field(name="Confirmed By", value=admin.mention, inline=True)
+                board_embed.add_field(name="Fulfillment", value=fulfillment_channel.mention, inline=True)
+                board_embed.timestamp = discord.utils.utcnow()
+                board_view = OrderControlView(order_id)
+                board_msg = await board_channel.send(embed=board_embed, view=board_view)
+                # 记录看板消息 ID，用于后续同步更新
+                if order_db:
+                    order_db.save_board_message(order_id, str(board_msg.id), str(board_channel.id))
+                logger.info(f"📊 Order {order_id} posted to order-board")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to post to order board: {e}")
+
+        # ========== 10. 在咨询频道通知 ==========
+        try:
+            await consulting_channel.send(
+                f"✅ **Order created!**\n"
+                f"📋 Order ID: `{order_id}`\n"
+                f"📢 Fulfillment channel: {fulfillment_channel.mention}\n"
+                f"📌 {customer.mention} — Please move to the fulfillment channel"
+            )
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to notify consulting channel: {e}")
+
+        return (order_id, fulfillment_channel, customer)
+
+    except Exception as e:
+        logger.error(f"❌ Error in create_order_from_confirmation: {e}", exc_info=True)
+        return None
+
+
 class PaymentConfirmView(discord.ui.View):
     """
     收款确认面板 — 管理员在咨询频道中一键确认/拒绝收款
@@ -1484,110 +1736,26 @@ class PaymentConfirmView(discord.ui.View):
 
         try:
             consulting_channel = interaction.channel
-            guild = interaction.guild
-
-            # ========== 1. 生成订单号 ==========
-            if order_db:
-                order_id = order_db.generate_order_id()
+            result = await create_order_from_confirmation(
+                guild=interaction.guild,
+                customer_id=self.customer_id,
+                amount=self.amount,
+                service_desc=self.service_desc,
+                admin=interaction.user,
+                consulting_channel=consulting_channel
+            )
+            if result:
+                order_id, fulfillment_channel, customer = result
+                await interaction.followup.send(
+                    f"✅ **订单已创建！**\n"
+                    f"📋 订单号: `{order_id}`\n"
+                    f"💰 金额: ${self.amount:.2f}\n"
+                    f"🎮 服务: {self.service_desc}\n"
+                    f"📢 履约频道: {fulfillment_channel.mention}\n"
+                    f"📌 {customer.mention} — 请前往履约频道"
+                )
             else:
-                order_id = f"ORD-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-
-            # ========== 2. 获取客户对象 ==========
-            customer = guild.get_member(self.customer_id)
-            if not customer:
-                await interaction.followup.send(f"❌ 找不到用户 ID: {self.customer_id}", ephemeral=True)
-                return
-
-            # ========== 3. 保存订单到数据库 ==========
-            if order_db:
-                try:
-                    order_db.save_order_with_details(
-                        order_id=order_id,
-                        handler_userid=str(customer.id),
-                        amount=self.amount,
-                        service_desc=self.service_desc,
-                        confirmed_by=str(interaction.user.id),
-                        consulting_channel_id=str(consulting_channel.id)
-                    )
-                    logger.info(f"💾 Order {order_id} saved to database")
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to save order: {e}")
-
-            # ========== 4. 创建履约频道 ==========
-            fulfillment_channel_name = f"fulfillment-{order_id.lower()}"
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                customer: discord.PermissionOverwrite(
-                    view_channel=True, send_messages=True, read_message_history=True
-                ),
-                guild.me: discord.PermissionOverwrite(
-                    view_channel=True, send_messages=True, manage_channels=True
-                )
-            }
-            if interaction.user.id != guild.owner_id:
-                overwrites[interaction.user] = discord.PermissionOverwrite(
-                    view_channel=True, send_messages=True, manage_channels=True
-                )
-            booster_role = discord.utils.get(guild.roles, name="Booster")
-            if booster_role:
-                overwrites[booster_role] = discord.PermissionOverwrite(
-                    view_channel=True, send_messages=True, read_message_history=True
-                )
-
-            fulfillment_channel = await guild.create_text_channel(
-                name=fulfillment_channel_name,
-                overwrites=overwrites,
-                topic=f"Order: {order_id} | User: {customer.name} | Amount: ${self.amount} | Status: In Progress"
-            )
-            logger.info(f"✅ Fulfillment channel created: {fulfillment_channel_name}")
-
-            # ========== 5. 更新订单频道信息 ==========
-            if order_db:
-                order_db.update_order_channel(order_id, str(fulfillment_channel.id), fulfillment_channel_name)
-
-            # ========== 6. 发送订单卡片 ==========
-            order_embed = discord.Embed(
-                title="📦 Order Details",
-                description=f"Welcome {customer.mention}! Your service has been confirmed.",
-                color=discord.Color.gold()
-            )
-            order_embed.add_field(name="Order ID", value=f"`{order_id}`", inline=True)
-            order_embed.add_field(name="Status", value="🟡 Pending", inline=True)
-            order_embed.add_field(name="Service", value=self.service_desc, inline=False)
-            order_embed.add_field(name="Amount", value=f"${self.amount:.2f}", inline=True)
-            order_embed.add_field(name="Customer", value=customer.mention, inline=True)
-            order_embed.add_field(name="Confirmed By", value=interaction.user.mention, inline=True)
-            order_embed.add_field(
-                name="Info",
-                value=f"📝 Consulting Channel: {consulting_channel.mention}\n⏱️ Service starts within 10 minutes",
-                inline=False
-            )
-            order_embed.timestamp = discord.utils.utcnow()
-            order_embed.set_footer(text="Use the buttons below to update order status")
-            view = OrderControlView(order_id)
-            await fulfillment_channel.send(embed=order_embed, view=view)
-
-            # ========== 7. 迁移咨询频道历史 ==========
-            try:
-                await migrate_history(consulting_channel, fulfillment_channel, limit=20)
-            except Exception as e:
-                logger.warning(f"⚠️ Failed to migrate history: {e}")
-
-            # ========== 8. 在咨询频道通知 ==========
-            await interaction.followup.send(
-                f"✅ **订单已创建！**\n"
-                f"📋 订单号: `{order_id}`\n"
-                f"💰 金额: ${self.amount:.2f}\n"
-                f"🎮 服务: {self.service_desc}\n"
-                f"📢 履约频道: {fulfillment_channel.mention}\n"
-                f"📌 {customer.mention} — 请前往履约频道"
-            )
-
-            # ========== 9. 在履约频道通知客户 ==========
-            await fulfillment_channel.send(
-                f"🚀 {customer.mention} 您的服务已确认！打手将在 10 分钟内开始。"
-            )
-
+                await interaction.followup.send("❌ 创建订单失败，请查看日志", ephemeral=True)
         except Exception as e:
             logger.error(f"❌ Error creating order from button: {e}", exc_info=True)
             await interaction.followup.send(f"❌ 创建订单失败: {str(e)[:100]}")
@@ -1619,6 +1787,7 @@ class PaymentConfirmView(discord.ui.View):
                 await interaction.channel.send(msg)
             except Exception as e:
                 logger.warning(f"⚠️ Failed to notify customer: {e}")
+
 
 
 def _extract_order_info_from_reply(reply: str) -> Optional[Dict]:
@@ -1733,10 +1902,35 @@ def create_bot() -> commands.Bot:
 
     @bot.event
     async def on_ready():
+        global _bot_cache
+        _bot_cache = list(bot.guilds)
         logger.info(f"✅ Bot logged in as {bot.user}")
         logger.info(f"📊 Connected to {len(bot.guilds)} server(s)")
         activity = discord.Game(name="NBA 2K26 Boosting | !help")
         await bot.change_presence(activity=activity)
+        # 尝试自动创建 order-board 频道（如果不存在）
+        for guild in bot.guilds:
+            board_exists = discord.utils.get(guild.text_channels, name="order-board")
+            if not board_exists:
+                try:
+                    overwrites = {
+                        guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
+                        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_messages=True)
+                    }
+                    # 给管理员角色发消息权限
+                    for role in guild.roles:
+                        if role.permissions.administrator:
+                            overwrites[role] = discord.PermissionOverwrite(
+                                view_channel=True, send_messages=False, read_message_history=True
+                            )
+                    await guild.create_text_channel(
+                        name="order-board",
+                        overwrites=overwrites,
+                        topic="📊 Order Dashboard — All orders are tracked here automatically"
+                    )
+                    logger.info(f"📊 Created #order-board channel in {guild.name}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to create order-board: {e}")
 
     @bot.event
     async def on_message(message: discord.Message):
@@ -2134,130 +2328,38 @@ def create_bot() -> commands.Bot:
         try:
             logger.info(f"💳 {ctx.author.name} confirmed payment for {user.name} | Amount: ${amount} | Project: {project}")
 
-            # ========== 1. 生成订单号 ==========
-            if order_db:
-                order_id = order_db.generate_order_id()
-            else:
-                order_id = f"ORD-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-            logger.info(f"📋 Generated order ID: {order_id}")
-
-            # ========== 2. 保存订单到数据库 ==========
-            if order_db:
-                try:
-                    order_db.save_order_with_details(
-                        order_id=order_id,
-                        handler_userid=str(user.id),
-                        amount=float(amount),
-                        service_desc=project or "NBA 2K26 Service",
-                        confirmed_by=str(ctx.author.id),
-                        consulting_channel_id=str(ctx.channel.id)
-                    )
-                    logger.info(f"💾 Order {order_id} saved to database")
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to save order to DB: {e}")
-
-            # ========== 3. 在咨询频道发送确认消息 ==========
+            # 在咨询频道发送确认消息
             embed = discord.Embed(
-                title="✅ Payment Confirmed!",
-                description=f"Order `{order_id}` has been created!",
+                title="⏳ Creating order...",
+                description=f"Payment confirmed for {user.mention}",
                 color=discord.Color.green()
             )
-            embed.add_field(name="Order ID", value=f"`{order_id}`", inline=True)
             embed.add_field(name="Amount", value=f"${amount}", inline=True)
             embed.add_field(name="Service", value=project or "NBA 2K26 Service", inline=False)
-            embed.add_field(name="Customer", value=user.mention, inline=True)
-            embed.add_field(name="Fulfillment", value="Creating channel...", inline=True)
-            embed.set_footer(text=f"Confirmed by: {ctx.author.name}")
-            await ctx.send(embed=embed)
+            status_msg = await ctx.send(embed=embed)
 
-            # ========== 4. 创建履约频道 ==========
-            try:
-                fulfillment_channel_name = f"fulfillment-{order_id.lower()}"
+            # 调用统一的订单创建函数
+            result = await create_order_from_confirmation(
+                guild=ctx.guild,
+                customer_id=user.id,
+                amount=float(amount),
+                service_desc=project or "NBA 2K26 Service",
+                admin=ctx.author,
+                consulting_channel=ctx.channel
+            )
 
-                # 权限设置：仅用户和管理员可见
-                overwrites = {
-                    ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                    user: discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=True,
-                        read_message_history=True
-                    ),
-                    ctx.guild.me: discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=True,
-                        manage_channels=True
-                    )
-                }
-
-                # 将管理员也加入
-                if ctx.author.id != ctx.guild.owner_id:
-                    overwrites[ctx.author] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=True,
-                        manage_channels=True
-                    )
-
-                # 尝试将 Booster 角色也加入
-                booster_role = discord.utils.get(ctx.guild.roles, name="Booster")
-                if booster_role:
-                    overwrites[booster_role] = discord.PermissionOverwrite(
-                        view_channel=True,
-                        send_messages=True,
-                        read_message_history=True
-                    )
-
-                # 创建频道
-                fulfillment_channel = await ctx.guild.create_text_channel(
-                    name=fulfillment_channel_name,
-                    overwrites=overwrites,
-                    topic=f"Order: {order_id} | User: {user.name} | Amount: ${amount} | Status: In Progress | Consulting: {ctx.channel.mention}"
-                )
-
-                logger.info(f"✅ Fulfillment channel created: {fulfillment_channel_name}")
-
-                # ========== 5. 更新订单中的频道ID ==========
-                if order_db:
-                    order_db.update_order_channel(order_id, str(fulfillment_channel.id), fulfillment_channel_name)
-
-                # ========== 6. 在履约频道发送可视化订单卡片（带按钮）==========
-                order_embed = discord.Embed(
-                    title="📦 Order Details",
-                    description=f"Welcome {user.mention}! Your service has been confirmed and is ready to begin.",
-                    color=discord.Color.gold()
-                )
-                order_embed.add_field(name="Order ID", value=f"`{order_id}`", inline=True)
-                order_embed.add_field(name="Status", value="🟡 Pending", inline=True)
-                order_embed.add_field(name="Service", value=project or "NBA 2K26 Service", inline=False)
-                order_embed.add_field(name="Amount", value=f"${amount}", inline=True)
-                order_embed.add_field(name="Customer", value=user.mention, inline=True)
-                order_embed.add_field(name="Confirmed By", value=ctx.author.mention, inline=True)
-                order_embed.add_field(
-                    name="Info",
-                    value=f"📝 Consulting Channel: {ctx.channel.mention}\n⏱️ Service starts within 10 minutes",
-                    inline=False
-                )
-                order_embed.timestamp = discord.utils.utcnow()
-                order_embed.set_footer(text="Use the buttons below to update order status")
-
-                view = OrderControlView(order_id)
-                await fulfillment_channel.send(embed=order_embed, view=view)
-
-                # ========== 7. 迁移咨询频道历史到履约频道 ==========
-                try:
-                    await migrate_history(ctx.channel, fulfillment_channel, limit=20)
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to migrate history: {e}")
-
-                # ========== 8. 通知咨询频道 ==========
-                await ctx.send(
-                    f"✅ **Fulfillment channel created**: {fulfillment_channel.mention}\n"
-                    f"📌 {user.mention} — Please move to the fulfillment channel to continue\n"
-                    f"📋 Order ID: `{order_id}`"
-                )
-
-            except Exception as e:
-                logger.error(f"❌ Failed to create fulfillment channel: {e}")
-                await ctx.send(f"❌ Failed to create fulfillment channel: {str(e)[:100]}")
+            if result:
+                order_id, fulfillment_channel, _ = result
+                # 更新确认消息
+                embed.title = "✅ Payment Confirmed!"
+                embed.description = f"Order `{order_id}` has been created!"
+                embed.add_field(name="Order ID", value=f"`{order_id}`", inline=True)
+                embed.add_field(name="Customer", value=user.mention, inline=True)
+                embed.add_field(name="Fulfillment", value=fulfillment_channel.mention, inline=True)
+                embed.set_footer(text=f"Confirmed by: {ctx.author.name}")
+                await status_msg.edit(embed=embed)
+            else:
+                await ctx.send(f"❌ Failed to create order for {user.name}")
 
         except Exception as e:
             logger.error(f"❌ Error confirming payment: {e}", exc_info=True)

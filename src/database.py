@@ -64,6 +64,14 @@ class Database:
             last_seq INTEGER DEFAULT 0
         )''')
 
+        # 订单看板消息映射表
+        c.execute('''CREATE TABLE IF NOT EXISTS board_messages (
+            order_id TEXT PRIMARY KEY,
+            board_message_id TEXT,
+            board_channel_id TEXT,
+            created_at TEXT
+        )''')
+
         conn.commit()
         conn.close()
 
@@ -268,6 +276,44 @@ class Database:
         c = conn.cursor()
         try:
             c.execute("SELECT * FROM system_status WHERE service = ?", (service,))
+            row = c.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def get_orders_by_status(self, status: str) -> list:
+        """获取指定状态的订单"""
+        conn = self.get_connection()
+        c = conn.cursor()
+        try:
+            c.execute("SELECT * FROM order_mapping WHERE status = ? ORDER BY created_at DESC", (status,))
+            return [dict(row) for row in c.fetchall()]
+        finally:
+            conn.close()
+
+    def save_board_message(self, order_id: str, message_id: str, channel_id: str) -> bool:
+        """记录订单看板消息 ID"""
+        conn = self.get_connection()
+        c = conn.cursor()
+        try:
+            c.execute('''
+                INSERT OR REPLACE INTO board_messages (order_id, board_message_id, board_channel_id, created_at)
+                VALUES (?, ?, ?, ?)
+            ''', (order_id, message_id, channel_id, datetime.now().isoformat()))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"❌ 保存看板消息失败: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_board_message(self, order_id: str) -> Optional[Dict]:
+        """获取订单看板消息信息"""
+        conn = self.get_connection()
+        c = conn.cursor()
+        try:
+            c.execute("SELECT * FROM board_messages WHERE order_id = ?", (order_id,))
             row = c.fetchone()
             return dict(row) if row else None
         finally:

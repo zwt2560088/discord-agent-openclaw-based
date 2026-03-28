@@ -1,0 +1,44 @@
+2026-03-28 21:55:22,535 [WARNING] dotenv.main: Python-dotenv could not parse statement starting at line 5
+2026-03-28 21:55:22,543 [INFO] DiscordBot: ✅ SQLite context database initialized
+2026-03-28 21:55:22,546 [INFO] DiscordBot: AI Services: OpenAI=True, DeepSeek=True, ReAct=True
+2026-03-28 21:55:32,149 [INFO] sentence_transformers.SentenceTransformer: Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2026-03-28 21:55:37,536 [INFO] DiscordBot: ✅ RAG Agent initialized successfully
+2026-03-28 21:55:37,825 [INFO] DiscordBot: 🔧 ReAct Agent using DeepSeek
+2026-03-28 21:55:37,825 [ERROR] DiscordBot: ❌ ReAct Agent initialization failed: Prompt missing required variables: {'agent_scratchpad'}
+Traceback (most recent call last):
+  File "/Users/zhaowentao/IdeaProjects/discord-agent-openclaw-based/src/discord_bot_final.py", line 641, in _init_react_agent
+    self._react_agent = create_react_agent(llm, tools, react_prompt)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/anaconda3/lib/python3.12/site-packages/langchain/agents/react/agent.py", line 123, in create_react_agent
+    raise ValueError(f"Prompt missing required variables: {missing_vars}")
+ValueError: Prompt missing required variables: {'agent_scratchpad'}
+2026-03-28 21:55:37,827 [INFO] DiscordBot: ✅ LangChain ReAct Agent initialized successfully
+2026-03-28 21:55:37,827 [INFO] DiscordBot: 🚀 Starting Discord Bot (Final Optimized Version)...
+2026-03-28 21:55:37,827 [INFO] DiscordBot: 🌐 Proxy configured: http://127.0.0.1:8890
+2026-03-28 21:55:37,828 [WARNING] discord.client: PyNaCl is not installed, voice will NOT be supported
+2026-03-28 21:55:37,828 [WARNING] discord.client: davey is not installed, voice will NOT be supported
+2026-03-28 21:55:37,828 [INFO] discord.client: logging in using static token
+2026-03-28 21:55:40,135 [INFO] discord.gateway: Shard ID None has connected to Gateway (Session ID: ee4401954f9810cabeb4703b02161f58).
+2026-03-28 21:55:42,190 [INFO] DiscordBot: ✅ Bot logged in as Legend's Agent(Ping me question)#0564
+2026-03-28 21:55:42,190 [INFO] DiscordBot: 📊 Connected to 1 server(s)
+2026-03-28 21:57:00,760 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:57:00,760 [INFO] DiscordBot: 📌 Message ID: 1487450440911028417 | Content: 'yo'
+2026-03-28 21:57:00,760 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487450440911028417 | User: legend2k26 | Channel: order-1802a884 | Content: 'yo'
+2026-03-28 21:57:01,519 [INFO] DiscordBot: 🔍 RAG retrieval for: yo...
+2026-03-28 21:57:01,600 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 21:57:01,601 [INFO] DiscordBot: 🔄 Calling DeepSeek for: yo...
+2026-03-28 21:57:03,552 [INFO] DiscordBot: ✅ DeepSeek reply (57 chars): Hey! 👋 How can I help you with NBA 2K26 boosting t...
+2026-03-28 21:57:03,553 [INFO] DiscordBot: ✅ AI reply: yo... -> Hey! 👋 How can I help you with...
+2026-03-28 21:57:03,554 [INFO] DiscordBot: 📤 Sending reply (57 chars): Hey! 👋 How can I help you with NBA 2K26 boosting t...
+2026-03-28 21:57:04,008 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 57) | MsgID: 1487450440911028417
+2026-03-28 21:57:23,323 [INFO] DiscordBot: ✅ Message accepted: @legend2k26 in #order-1802a884
+2026-03-28 21:57:23,329 [INFO] DiscordBot: 📌 Message ID: 1487450535811350730 | Content: 'do u know who am i ,and what i want'
+2026-03-28 21:57:23,334 [INFO] DiscordBot: 🔄 [handle_message START] MsgID: 1487450535811350730 | User: legend2k26 | Channel: order-1802a884 | Content: 'do u know who am i ,and what i want'
+2026-03-28 21:57:23,985 [INFO] DiscordBot: 🔗 Combo/intent message detected, skipping quick reply: do u know who am i ,and what i want...
+2026-03-28 21:57:23,985 [INFO] DiscordBot: 🔍 RAG retrieval for: do u know who am i ,and what i...
+2026-03-28 21:57:24,031 [INFO] DiscordBot: 📚 RAG retrieved 5 relevant documents
+2026-03-28 21:57:24,031 [INFO] DiscordBot: 🔄 Calling DeepSeek for: do u know who am i ,and what i...
+2026-03-28 21:57:26,451 [INFO] DiscordBot: ✅ DeepSeek reply (120 chars): I don't have your info yet! 😅 What NBA 2K26 servic...
+2026-03-28 21:57:26,455 [INFO] DiscordBot: ✅ AI reply: do u know who am i ,and what i... -> I don't have your info yet! 😅 ...
+2026-03-28 21:57:26,455 [INFO] DiscordBot: 📤 Sending reply (120 chars): I don't have your info yet! 😅 What NBA 2K26 servic...
+2026-03-28 21:57:27,002 [INFO] DiscordBot: ✅ [handle_message END] Reply sent successfully (total chars: 120) | MsgID: 1487450535811350730
