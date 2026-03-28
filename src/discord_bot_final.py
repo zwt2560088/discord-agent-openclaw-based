@@ -607,125 +607,129 @@ if LANGCHAIN_AVAILABLE:
 
         return "Service not found. Try: rep sleeve, rep grind, 99 overall, challenge, badge, specialty, mt coins, season pass, dma, account"
 
-    @tool
-    def confirm_payment(order_details: str) -> str:
-        """
-        当管理员或用户确认已付款时，解析订单详情并返回汇总。
-        返回结果包含金额和具体的 !confirm-payment 命令，供管理员执行。
-        参数: order_details - 订单内容描述，如 "rep grind", "50x rep sleeve", "250 all specialization + 50x"
-        """
-        details_lower = order_details.lower()
-        total = 0
-        items = []
+@tool
+def confirm_payment(order_details: str, user_id: str = "") -> str:
+    """
+    当管理员或用户确认已付款时，解析订单详情并返回汇总。
+    返回结果包含金额和具体的 !confirm-payment 命令，供管理员执行。
+    参数:
+    - order_details: 订单内容描述，如 "rep grind", "50x rep sleeve", "250 all specialization + 50x"
+    - user_id: 客户的 Discord 用户 ID（从对话上下文中的 CURRENT_USER_ID 获取）
+    """
+    details_lower = order_details.lower()
+    total = 0
+    items = []
 
-        # 解析订单项目
-        # Challenge（按数字优先匹配更大的）
-        if "250" in details_lower and any(x in details_lower for x in ["challenge", "layer", "250"]):
-            items.append("250 Layers Challenge ($40)")
-            total += 40
-        elif "200" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
-            items.append("200 Layers Challenge ($20)")
-            total += 20
-        elif "150" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
-            items.append("150 Layers Challenge ($15)")
-            total += 15
-        elif "100" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
-            items.append("100 Layers Challenge ($10)")
-            total += 10
+    # 解析订单项目
+    # Challenge（按数字优先匹配更大的）
+    if "250" in details_lower and any(x in details_lower for x in ["challenge", "layer", "250"]):
+        items.append("250 Layers Challenge ($40)")
+        total += 40
+    elif "200" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+        items.append("200 Layers Challenge ($20)")
+        total += 20
+    elif "150" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+        items.append("150 Layers Challenge ($15)")
+        total += 15
+    elif "100" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+        items.append("100 Layers Challenge ($10)")
+        total += 10
 
-        # Specialty
-        if any(x in details_lower for x in ["all 5", "all specialization", "specialties", "speciality"]):
-            items.append("All 5 Specialties ($20)")
-            total += 20
-        elif any(x in details_lower for x in ["specialty", "specialisation"]):
-            items.append("Single Specialty ($15)")
-            total += 15
+    # Specialty
+    if any(x in details_lower for x in ["all 5", "all specialization", "specialties", "speciality"]):
+        items.append("All 5 Specialties ($20)")
+        total += 20
+    elif any(x in details_lower for x in ["specialty", "specialisation"]):
+        items.append("Single Specialty ($15)")
+        total += 15
 
-        # ========== 50x Rep Sleeve + Level 40 组合 ==========
-        if any(x in details_lower for x in ["50x", "50 x"]) and any(x in details_lower for x in ["lvl40", "level 40", "level40", "lv40"]):
-            items.append("50x Rep Sleeve + Level 40 ($25)")
-            total += 25
-        # ========== Rep Sleeve（独立） ==========
-        elif "300x" in details_lower:
-            items.append("300x Rep Sleeve ($30)")
-            total += 30
-        elif "100x" in details_lower:
-            items.append("100x Rep Sleeve ($21.50)")
-            total += 21.5
-        elif "50x" in details_lower:
-            items.append("50x Rep Sleeve ($15)")
-            total += 15
+    # ========== 50x Rep Sleeve + Level 40 组合 ==========
+    if any(x in details_lower for x in ["50x", "50 x"]) and any(x in details_lower for x in ["lvl40", "level 40", "level40", "lv40"]):
+        items.append("50x Rep Sleeve + Level 40 ($25)")
+        total += 25
+    # ========== Rep Sleeve（独立） ==========
+    elif "300x" in details_lower:
+        items.append("300x Rep Sleeve ($30)")
+        total += 30
+    elif "100x" in details_lower:
+        items.append("100x Rep Sleeve ($21.50)")
+        total += 21.5
+    elif "50x" in details_lower:
+        items.append("50x Rep Sleeve ($15)")
+        total += 15
 
-        # 99 Overall
-        if any(x in details_lower for x in ["99 overall", "99 ovr", "max overall"]):
-            items.append("99 Overall ($15)")
-            total += 15
+    # 99 Overall
+    if any(x in details_lower for x in ["99 overall", "99 ovr", "max overall"]):
+        items.append("99 Overall ($15)")
+        total += 15
 
-        # Badge
-        if any(x in details_lower for x in ["badge", "badges", "hof badge", "gold badge"]):
-            items.append("Badge Unlock ($15)")
-            total += 15
+    # Badge
+    if any(x in details_lower for x in ["badge", "badges", "hof badge", "gold badge"]):
+        items.append("Badge Unlock ($15)")
+        total += 15
 
-        # Rep Grind
-        if any(x in details_lower for x in ["rep grind", "grind", "rep rank"]):
-            if "legend" in details_lower:
-                items.append("Rep Grind to Legend ($60)")
-                total += 60
-            elif "veteran" in details_lower:
-                items.append("Rep Grind to Veteran ($40)")
-                total += 40
-            elif "starter" in details_lower:
-                items.append("Rep Grind to Starter ($40)")
-                total += 40
-            elif "rookie" in details_lower:
-                items.append("Rep Grind Rookie ($35)")
-                total += 35
-            else:
-                items.append("Rep Grind ($40)")
-                total += 40
-
-        # Season Pass
-        if any(x in details_lower for x in ["season pass", "season 40"]):
-            items.append("Season Pass ($15)")
-            total += 15
-
-        # MT Coins
-        if any(x in details_lower for x in ["mt coin", "mt "]):
-            if "1m" in details_lower or "1m" in details_lower:
-                items.append("1M MT Coins ($80)")
-                total += 80
-            elif "500k" in details_lower:
-                items.append("500K MT Coins ($45)")
-                total += 45
-            elif "100k" in details_lower:
-                items.append("100K MT Coins ($10)")
-                total += 10
-            else:
-                items.append("MT Coins ($10-80)")
-                total += 10  # 默认最低价
-
-        # DMA
-        if "dma" in details_lower:
-            items.append("DMA Mods ($60-110)")
+    # Rep Grind
+    if any(x in details_lower for x in ["rep grind", "grind", "rep rank"]):
+        if "legend" in details_lower:
+            items.append("Rep Grind to Legend ($60)")
             total += 60
+        elif "veteran" in details_lower:
+            items.append("Rep Grind to Veteran ($40)")
+            total += 40
+        elif "starter" in details_lower:
+            items.append("Rep Grind to Starter ($40)")
+            total += 40
+        elif "rookie" in details_lower:
+            items.append("Rep Grind Rookie ($35)")
+            total += 35
+        else:
+            items.append("Rep Grind ($40)")
+            total += 40
 
-        # Account
-        if any(x in details_lower for x in ["account", "pre-built"]):
-            items.append("Pre-built Account ($80-100)")
+    # Season Pass
+    if any(x in details_lower for x in ["season pass", "season 40"]):
+        items.append("Season Pass ($15)")
+        total += 15
+
+    # MT Coins
+    if any(x in details_lower for x in ["mt coin", "mt "]):
+        if "1m" in details_lower or "1m" in details_lower:
+            items.append("1M MT Coins ($80)")
             total += 80
+        elif "500k" in details_lower:
+            items.append("500K MT Coins ($45)")
+            total += 45
+        elif "100k" in details_lower:
+            items.append("100K MT Coins ($10)")
+            total += 10
+        else:
+            items.append("MT Coins ($10-80)")
+            total += 10  # 默认最低价
 
-        if items:
-            service_str = " + ".join(item.split(" ($")[0] for item in items)
-            summary = (
-                f"✅ **Payment Confirmed!**\n\n"
-                f"**Order Summary:**\n" + "\n".join(f"• {item}" for item in items) +
-                f"\n\n**Total: ${total}**\n\n"
-                f"📋 **Admin, run this command to create order channel:**\n"
-                f"`!confirm-payment @USER {total} \"{service_str}\"`"
-            )
-            return summary
+    # DMA
+    if "dma" in details_lower:
+        items.append("DMA Mods ($60-110)")
+        total += 60
 
-        return f"✅ Payment mentioned but no specific service matched in: \"{order_details}\". Admin please run: `!confirm-payment @USER <amount> \"<service>\"` with correct details."
+    # Account
+    if any(x in details_lower for x in ["account", "pre-built"]):
+        items.append("Pre-built Account ($80-100)")
+        total += 80
+
+    if items:
+        service_str = " + ".join(item.split(" ($")[0] for item in items)
+        # 使用真实 user_id 生成 mention（如果有的话）
+        user_mention = f"<@{user_id}>" if user_id else "@USER"
+        summary = (
+            f"✅ **Payment Confirmed!**\n\n"
+            f"**Order Summary:**\n" + "\n".join(f"• {item}" for item in items) +
+            f"\n\n**Total: ${total}**\n\n"
+            f"📋 **Admin, run this command to create order channel:**\n"
+            f"`!confirm-payment {user_mention} {total} \"{service_str}\"`"
+        )
+        return summary
+
+    return f"✅ Payment mentioned but no specific service matched in: \"{order_details}\". Admin please run: `!confirm-payment @USER <amount> \"<service>\"` with correct details."
 
     @tool
     def send_payment_confirmation(user_id: str, amount: float, service_desc: str, channel_id: str) -> str:
@@ -925,7 +929,7 @@ class AIService:
             react_prompt = PromptTemplate.from_template("""You are an intelligent NBA 2K26 customer service assistant with COMPLETE MEMORY of every user's past interactions.
 
 IMPORTANT RULES:
-1. If ANYONE mentions "paid", "paid for", "already paid", "payment confirmed", "sent the money", "已付", "已付款" → MUST use confirm_payment tool
+1. NEVER confirm payment unless someone EXPLICITLY says they already sent money (e.g., "paid", "already paid", "sent the money", "payment confirmed", "已付", "已付款", "I paid", "money sent"). Admin providing a crypto address or payment info is NOT payment confirmation — it means payment hasn't happened yet.
 2. If user asks about price/cost/wants to know pricing → Use get_price tool
 3. If user asks about "my order", "order status", "track order", "where is my order" → Use check_order_status tool
 4. If user says "do you know me", "who am I", "remember me" → Review USER HISTORY and summarize their past interactions
@@ -935,9 +939,15 @@ IMPORTANT RULES:
 8. Messages tagged with [ADMIN] are from the shop owner — use as context but DO NOT address the admin directly
 9. When user expresses clear purchase intent ("I want to buy", "let's do it", "order now", "I'll take it", "let's go") → After providing price with get_price, use send_payment_confirmation to send a payment confirmation button to admin
 10. When using send_payment_confirmation, you MUST pass the user_id (from USER HISTORY), amount (total price), service_desc, and channel_id (current channel)
+11. If user says they want to talk to admin/owner/real person, say briefly that the admin has been notified and stay quiet. Do NOT continue trying to sell or push orders.
+12. Admin sending crypto addresses (Bitcoin, Ethereum, etc.), PayPal info, or payment instructions = WAITING for payment, NOT confirmed. Never treat this as payment received.
 
-PAYMENT CONFIRMATION FLOW (CRITICAL):
-When someone says they paid or confirms payment:
+PAYMENT CONFIRMATION FLOW (CRITICAL — ONLY trigger on EXPLICIT payment confirmation):
+⚠️ ONLY use confirm_payment when someone EXPLICITLY states money was sent/received.
+❌ DO NOT trigger on: admin sending crypto address, admin appearing, user asking about payment methods, user saying they WANT to pay.
+✅ DO trigger on: "he paid", "already paid", "sent the money", "payment confirmed", "已付", "I just paid".
+
+When payment IS confirmed:
 Step 1: Review conversation history to find what service they ordered (e.g., "rep grind", "50x", etc.)
 Step 2: Call confirm_payment tool with the service description found in history
 Step 3: The tool returns the total and a command like: `!confirm-payment @USER <amount> "<service>"`
@@ -956,6 +966,8 @@ UNDERSTANDING USER INTENT:
 - "50x" alone → User is asking about price → Use get_price("50x rep sleeve", "50x")
 - "250 all specialization + 50x" → Combo order → Use get_price or confirm_payment
 - "he already paid" / "i sent the money" → Payment confirmation → Check history first, then confirm_payment with service details
+- Admin sends crypto address like "bc1q..." or "0x..." → This is PAYMENT INFO, NOT payment confirmation. Do NOT trigger confirm_payment. Just acknowledge.
+- "i want to talk to admin" / "no bot" / "real person" → User wants human help. Say the admin has been notified and stop. Do NOT try to sell.
 - "i want rep grind" → Order intent → get_price("rep grind")
 - "how much for 99" → Price query → get_price("99 overall")
 
@@ -964,7 +976,11 @@ DISTINGUISHING CURRENT vs HISTORY ORDERS:
 - If user asks "status of my order" or "my previous order" → This is about HISTORY, use check_order_status
 - If user has multiple past orders in history and says "paid" without specifics → Use the MOST RECENTLY DISCUSSED service
 
-CRITICAL: Before using confirm_payment, review the USER HISTORY for order details (e.g., "50x", "rep grind"). Include those in the Action Input.
+CRITICAL: Before using confirm_payment, verify the following:
+1. Someone EXPLICITLY said they sent/received money (not just asking about payment or admin providing payment info)
+2. Review the USER HISTORY for order details (e.g., "50x", "rep grind"). Include those in the Action Input.
+3. If admin sent a crypto address or payment method info, payment has NOT been confirmed yet — wait for explicit confirmation.
+4. ALWAYS pass the user_id from CURRENT_USER_ID in the context as the second argument to confirm_payment.
 
 Examples:
 
@@ -973,8 +989,8 @@ Question: he already paid
 Previous history shows user asked about 50x + lvl40
 Thought: User mentions payment. History shows they wanted 50x + lvl40 ($25). I'll confirm with that info.
 Action: confirm_payment
-Action Input: 50x rep sleeve + level 40
-Observation: ✅ Payment Confirmed! Order Summary: 50x Rep Sleeve + Level 40 ($25). Total: $25. Admin, run this command to create order channel: !confirm-payment @USER 25 "50x Rep Sleeve + Level 40"
+Action Input: 50x rep sleeve + level 40, <user_id from CURRENT_USER_ID>
+Observation: ✅ Payment Confirmed! Order Summary: 50x Rep Sleeve + Level 40 ($25). Total: $25. Admin, run this command to create order channel: !confirm-payment <@user_id> 25 "50x Rep Sleeve + Level 40"
 Thought: I now know the final answer.
 Final Answer: ✅ Payment confirmed! Total **$25** for 50x Rep Sleeve + Level 40.
 Admin, please run this command to create the fulfillment channel:
@@ -997,8 +1013,8 @@ Example 3 - Combo payment:
 Question: he already paid for 250 all specialization + 50x
 Thought: User confirms payment for multiple services. Use confirm_payment with all details.
 Action: confirm_payment
-Action Input: 250 all specialization + 50x
-Observation: ✅ Payment Confirmed! Total: $75. Admin, run: !confirm-payment @USER 75 "250 Layers Challenge + All 5 Specialties + 50x Rep Sleeve"
+Action Input: 250 all specialization + 50x, <user_id from CURRENT_USER_ID>
+Observation: ✅ Payment Confirmed! Total: $75. Admin, run: !confirm-payment <@user_id> 75 "250 Layers Challenge + All 5 Specialties + 50x Rep Sleeve"
 Thought: I now know the final answer.
 Final Answer: ✅ Payment confirmed! Total **$75**.
 Admin, please run: `!confirm-payment @user 75 "250 all specialization + 50x"`
@@ -1140,6 +1156,18 @@ Thought:{{agent_scratchpad}}""")
             # 清理输出
             reply = reply.replace("[ORDER_INTENT]", "").strip()
 
+            # ========== 关键修复：确保支付确认时自动追加 ORDER_INFO 标记 ==========
+            # 如果是支付确认场景，但回复中缺少 [ORDER_INFO:...] 标记，
+            # 自动从回复文本中提取金额和服务信息并追加
+            if is_payment_context and "[ORDER_INFO:" not in reply:
+                extracted = _extract_order_info_from_reply(reply)
+                if not extracted:
+                    # 尝试从 AI 回复中解析 Total 和服务信息
+                    extracted = _parse_payment_info_from_text(reply)
+                if extracted:
+                    reply += f"\n[ORDER_INFO:service={extracted['service']},amount={extracted['amount']}]"
+                    logger.info(f"💳 Auto-appended ORDER_INFO: service={extracted['service']}, amount={extracted['amount']}")
+
             logger.info(f"✅ ReAct Agent reply: {reply[:50]}... (has_intent={has_intent})")
             return reply, has_intent
 
@@ -1167,10 +1195,10 @@ Thought:{{agent_scratchpad}}""")
         # 所有其他消息交给 AI 处理
         return None
 
-    async def chat(self, user_msg: str, channel_id: str, user_id: str = None) -> Tuple[str, bool]:
+    async def chat(self, user_msg: str, channel_id: str, user_id: str = None) -> Tuple[str, bool, Optional[discord.ui.View]]:
         """
         智能对话处理流程
-        返回: (回复内容, 是否有订单意图)
+        返回: (回复内容, 是否有订单意图, 可选的按钮视图)
         user_id: 用户ID，用于加载完整历史记忆
         """
         # ========== 预加载用户完整历史记忆 ==========
@@ -1180,6 +1208,51 @@ Thought:{{agent_scratchpad}}""")
                 user_memory_summary = await context_manager.get_user_memory_summary(user_id)
             except Exception as e:
                 logger.warning(f"⚠️ Failed to load user memory: {e}")
+
+        # ========== 第零步：付款意图快速检测 ==========
+        # 如果用户消息包含付款关键词，尝试从历史中提取订单信息，直接返回按钮
+        payment_keywords = ["paid", "sent", "payment sent", "money sent", "i paid", "已付"]
+        user_msg_lower = user_msg.lower()
+        if any(kw in user_msg_lower for kw in payment_keywords):
+            try:
+                history = await context_manager.get_context(channel_id)
+                service_desc, amount = parse_order_from_history(history)
+                if service_desc and amount:
+                    view = PaymentConfirmView(service_desc=service_desc, amount=amount)
+                    reply_text = f"✅ Payment detected for **{service_desc}** (${amount:.2f}). Admin, please click the button below to confirm and create the order."
+                    try:
+                        await context_manager.save_context(channel_id, user_msg, reply_text)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to save context: {e}")
+                    logger.info(f"💳 Payment quick-path: service={service_desc}, amount={amount}")
+                    return reply_text, True, view
+            except Exception as e:
+                logger.warning(f"⚠️ Payment quick-path failed: {e}")
+
+        # ========== 第零步补充：购买意向检测（非付款，但表达了想买的意愿）==========
+        # 例如客户说 "I want to order", "yes im ready", "let's go" 等
+        # 但不包含 "paid"/"sent"（那些已在上面处理）
+        purchase_only_keywords = ["i want to order", "let's go", "yes im ready", "im ready", "i'm ready",
+                                   "order now", "start order", "create order", "下单", "购买"]
+        if any(kw in user_msg_lower for kw in purchase_only_keywords):
+            try:
+                history = await context_manager.get_context(channel_id)
+                service_desc, amount = parse_order_from_history(history)
+                if service_desc and amount:
+                    view = CreateOrderView()
+                    reply_text = (
+                        f"✅ **Order ready!** Click the button below to create the fulfillment channel.\n\n"
+                        f"**Service:** {service_desc}\n"
+                        f"**Amount:** ${amount:.2f}"
+                    )
+                    try:
+                        await context_manager.save_context(channel_id, user_msg, reply_text)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to save context: {e}")
+                    logger.info(f"📦 Purchase intent quick-path: service={service_desc}, amount={amount}")
+                    return reply_text, True, view
+            except Exception as e:
+                logger.warning(f"⚠️ Purchase intent quick-path failed: {e}")
 
         # ========== 第一步：关键词快速回复 (<500ms) ==========
         quick_result = self._quick_reply(user_msg)
@@ -1191,7 +1264,7 @@ Thought:{{agent_scratchpad}}""")
             except Exception as e:
                 logger.warning(f"⚠️ Failed to save context: {e}")
             logger.info(f"⚡ Quick reply: {user_msg[:30]}... -> {reply[:30]}...")
-            return reply, has_intent
+            return reply, has_intent, None
 
         # ========== 第二步：ReAct Agent 处理（如果可用）==========
         # 优先尝试使用 LangChain ReAct Agent 处理复杂意图
@@ -1209,7 +1282,7 @@ Thought:{{agent_scratchpad}}""")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to save context: {e}")
                 logger.info(f"✅ ReAct Agent handled: {user_msg[:30]}... -> {react_reply[:40]}...")
-                return react_reply, react_intent
+                return react_reply, react_intent, None
 
         # ========== 第三步：AI 处理 (<2s) ==========
         if not self._use_ai:
@@ -1218,7 +1291,7 @@ Thought:{{agent_scratchpad}}""")
                 await context_manager.save_context(channel_id, user_msg, default_reply)
             except Exception as e:
                 logger.warning(f"⚠️ Failed to save context: {e}")
-            return default_reply, False
+            return default_reply, False, None
 
         try:
             # 获取上下文历史
@@ -1373,16 +1446,16 @@ Examples:
                     logger.info(f"✅ AI reply: {user_msg[:30]}... -> {ai_reply[:30]}...")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to save AI response: {e}")
-                return ai_reply, has_order_intent
+                return ai_reply, has_order_intent, None
             else:
                 # AI 调用失败，返回友好的默认消息
                 fallback_reply = "I'm temporarily busy. Try again or ask about pricing (rep, 99, pass, mt)!"
                 logger.warning(f"⚠️ AI call returned empty, using fallback reply")
-                return fallback_reply, False
+                return fallback_reply, False, None
 
         except Exception as e:
             logger.error(f"❌ Unexpected error in chat: {e}", exc_info=True)
-            return "Sorry, I'm having trouble. Try again or type !help", False
+            return "Sorry, I'm having trouble. Try again or type !help", False, None
 
     async def _call_openai(self, messages: List[Dict]) -> Tuple[str, bool]:
         """调用 OpenAI API（异步）"""
@@ -1713,80 +1786,347 @@ class PaymentConfirmView(discord.ui.View):
     管理员点击按钮后：
     - ✅ 已收款：自动创建履约频道、保存订单、拉人
     - ❌ 未到账：通知买家检查转账状态
+
+    客户 ID 在按钮点击时从频道最近历史中自动识别（最近一条非 bot 消息的作者）
     """
-    def __init__(self, customer_id: int, service_desc: str, amount: float):
+    def __init__(self, service_desc: str, amount: float):
         super().__init__(timeout=7200)  # 2小时超时
-        self.customer_id = customer_id
         self.service_desc = service_desc
         self.amount = amount
 
-    @discord.ui.button(label="✅ 已收款 — 创建订单", style=discord.ButtonStyle.green, custom_id="payment_received")
+    async def _get_customer_from_channel(self, channel: discord.TextChannel) -> Optional[discord.Member]:
+        """
+        从频道最近历史中识别客户
+        1. 优先找非 bot、非管理员的用户（普通客户）
+        2. 如果找不到（比如管理员自己在测试），回退到第一个非 bot 用户
+        """
+        fallback_member = None
+        async for msg in channel.history(limit=20):
+            if msg.author.bot:
+                continue
+            try:
+                member = channel.guild.get_member(msg.author.id)
+                if not member:
+                    continue
+                if member.id in ADMIN_USER_IDS:
+                    # 记录第一个管理员作为回退
+                    if not fallback_member:
+                        fallback_member = member
+                    continue
+                # 找到非管理员用户
+                return member
+            except Exception:
+                pass
+        # 回退：如果频道中只有管理员消息，使用第一个非 bot 用户（管理员可能在测试）
+        return fallback_member
+
+    @discord.ui.button(label="✅ Confirm Payment & Create Order", style=discord.ButtonStyle.green, custom_id="payment_received")
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ 仅管理员可操作", ephemeral=True)
+            await interaction.response.send_message("❌ Only admins can confirm payments.", ephemeral=True)
             return
 
         # 禁用所有按钮
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(
-            content=f"⏳ 正在创建订单...",
+            content=f"⏳ Creating order...",
             view=self
         )
 
         try:
             consulting_channel = interaction.channel
+            # 从频道历史中自动识别客户
+            customer = await self._get_customer_from_channel(consulting_channel)
+            if not customer:
+                await interaction.followup.send("❌ Could not identify the customer from recent messages. Please use `!confirm-payment @user <amount> \"service\"` instead.", ephemeral=True)
+                return
+
             result = await create_order_from_confirmation(
                 guild=interaction.guild,
-                customer_id=self.customer_id,
+                customer_id=customer.id,
                 amount=self.amount,
                 service_desc=self.service_desc,
                 admin=interaction.user,
                 consulting_channel=consulting_channel
             )
             if result:
-                order_id, fulfillment_channel, customer = result
+                order_id, fulfillment_channel, _ = result
                 await interaction.followup.send(
-                    f"✅ **订单已创建！**\n"
-                    f"📋 订单号: `{order_id}`\n"
-                    f"💰 金额: ${self.amount:.2f}\n"
-                    f"🎮 服务: {self.service_desc}\n"
-                    f"📢 履约频道: {fulfillment_channel.mention}\n"
-                    f"📌 {customer.mention} — 请前往履约频道"
+                    f"✅ **Order created!**\n"
+                    f"📋 Order ID: `{order_id}`\n"
+                    f"💰 Amount: ${self.amount:.2f}\n"
+                    f"🎮 Service: {self.service_desc}\n"
+                    f"📢 Fulfillment: {fulfillment_channel.mention}\n"
+                    f"📌 {customer.mention} — Please proceed to the fulfillment channel"
                 )
             else:
-                await interaction.followup.send("❌ 创建订单失败，请查看日志", ephemeral=True)
+                await interaction.followup.send("❌ Failed to create order. Check logs.", ephemeral=True)
         except Exception as e:
             logger.error(f"❌ Error creating order from button: {e}", exc_info=True)
-            await interaction.followup.send(f"❌ 创建订单失败: {str(e)[:100]}")
+            await interaction.followup.send(f"❌ Failed to create order: {str(e)[:100]}")
 
-    @discord.ui.button(label="❌ 未到账 — 通知买家", style=discord.ButtonStyle.red, custom_id="payment_not_received")
+    @discord.ui.button(label="❌ Payment Not Received", style=discord.ButtonStyle.red, custom_id="payment_not_received")
     async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("❌ 仅管理员可操作", ephemeral=True)
+            await interaction.response.send_message("❌ Only admins can operate.", ephemeral=True)
             return
 
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(
-            content="❌ **支付未确认** — 已通知买家检查转账状态",
+            content="❌ **Payment not confirmed** — Customer has been notified.",
             view=self
         )
 
-        customer = interaction.guild.get_member(self.customer_id)
+        customer = await self._get_customer_from_channel(interaction.channel)
         if customer:
             try:
                 msg = (
-                    f"⚠️ {customer.mention} 管理员尚未收到您的付款。\n"
-                    f"请检查以下内容：\n"
-                    f"1. 💰 PayPal/G2G 订单是否已完成\n"
-                    f"2. 📸 请提供付款截图发送给管理员\n"
-                    f"3. 💬 如有问题请联系管理员 {interaction.user.mention}\n\n"
-                    f"服务: **{self.service_desc}** | 金额: **${self.amount:.2f}**"
+                    f"⚠️ {customer.mention} Admin has not received your payment yet.\n"
+                    f"Please check the following:\n"
+                    f"1. 💰 Is your PayPal/G2G order completed?\n"
+                    f"2. 📸 Please send a payment screenshot to admin\n"
+                    f"3. 💬 Contact admin {interaction.user.mention} if you have questions\n\n"
+                    f"Service: **{self.service_desc}** | Amount: **${self.amount:.2f}**"
                 )
                 await interaction.channel.send(msg)
             except Exception as e:
                 logger.warning(f"⚠️ Failed to notify customer: {e}")
+
+
+class OrderDetailsModal(discord.ui.Modal, title='Order Details'):
+    """填写订单服务和金额的表单（客户已通过 Select 选定）"""
+    service_input = discord.ui.TextInput(
+        label='Service Description',
+        placeholder='e.g. 99 Overall + Badge Unlock',
+        required=True,
+        max_length=200
+    )
+    amount_input = discord.ui.TextInput(
+        label='Amount ($)',
+        placeholder='e.g. 75',
+        required=True,
+        max_length=20
+    )
+
+    def __init__(self, channel: discord.TextChannel, customer: discord.Member):
+        super().__init__()
+        self.channel = channel
+        self.customer = customer
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = self.channel.guild
+
+        # 解析金额
+        amount_str = self.amount_input.value.strip().replace('$', '')
+        try:
+            amount = float(amount_str)
+            if amount <= 0:
+                raise ValueError
+        except ValueError:
+            await interaction.response.send_message(
+                f"❌ Invalid amount: `{self.amount_input.value}`. Please enter a positive number.",
+                ephemeral=True
+            )
+            return
+
+        service_desc = self.service_input.value.strip()
+        if not service_desc:
+            await interaction.response.send_message("❌ Service description cannot be empty.", ephemeral=True)
+            return
+
+        # 确认信息
+        confirm_embed = discord.Embed(
+            title="📋 Order Summary",
+            description="About to create fulfillment channel:",
+            color=discord.Color.blue()
+        )
+        confirm_embed.add_field(name="Customer", value=self.customer.mention, inline=True)
+        confirm_embed.add_field(name="Service", value=service_desc, inline=False)
+        confirm_embed.add_field(name="Amount", value=f"${amount:.2f}", inline=True)
+
+        await interaction.response.send_message(embed=confirm_embed)
+
+        try:
+            result = await create_order_from_confirmation(
+                guild=guild,
+                customer_id=self.customer.id,
+                amount=amount,
+                service_desc=service_desc,
+                admin=interaction.user,
+                consulting_channel=self.channel
+            )
+            if result:
+                order_id, fulfillment_channel, _ = result
+                await interaction.followup.send(
+                    f"✅ **Order created!**\n"
+                    f"📋 Order ID: `{order_id}`\n"
+                    f"💰 Amount: ${amount:.2f}\n"
+                    f"🎮 Service: {service_desc}\n"
+                    f"📢 Fulfillment: {fulfillment_channel.mention}\n"
+                    f"📌 {self.customer.mention} — Please proceed to the fulfillment channel"
+                )
+            else:
+                await interaction.followup.send("❌ Failed to create order. Check logs.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"❌ Error creating order from OrderDetailsModal: {e}", exc_info=True)
+            await interaction.followup.send(f"❌ Failed to create order: {str(e)[:100]}")
+
+
+class CustomerSelectView(discord.ui.View):
+    """客户选择菜单"""
+    def __init__(self, channel: discord.TextChannel, guild: discord.Guild):
+        super().__init__(timeout=30)
+        self.channel = channel
+        self.guild = guild
+
+    @discord.ui.select(
+        placeholder='Choose a customer...',
+        min_values=1,
+        max_values=1,
+        custom_id='customer_select'
+    )
+    async def customer_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        # 解析选中的 customer ID
+        customer_id = int(select.values[0])
+        customer = self.guild.get_member(customer_id)
+
+        if not customer:
+            await interaction.response.send_message("❌ Customer not found.", ephemeral=True)
+            return
+
+        # 尝试从频道历史预填充服务和金额
+        service_desc = None
+        amount = None
+
+        service_keywords = {
+            '250 challenge': '250 Layers Challenge',
+            '200 challenge': '200 Layers Challenge',
+            '150 challenge': '150 Layers Challenge',
+            '100 challenge': '100 Layers Challenge',
+            'all 5 specialties': 'All 5 Specialties',
+            'all specialization': 'All 5 Specialties',
+            '300x': '300x Rep Sleeve',
+            '100x': '100x Rep Sleeve',
+            '50x': '50x Rep Sleeve',
+            '99 overall': '99 Overall',
+            'badge': 'Badge Unlock',
+            'rep grind': 'Rep Grind',
+            'rep sleeve': 'Rep Sleeve',
+            'season pass': 'Season Pass',
+            'mt coin': 'MT Coins',
+            'dma': 'DMA Mods',
+            'account': 'Pre-built Account',
+            'taz body': 'Taz Body',
+            'custom build': 'Custom Build',
+        }
+
+        try:
+            async for msg in self.channel.history(limit=25):
+                if msg.author.bot:
+                    continue
+                content = msg.content
+                if not content:
+                    continue
+                content_lower = content.lower()
+
+                # 提取服务描述
+                if not service_desc:
+                    found = []
+                    for kw, name in service_keywords.items():
+                        if kw in content_lower and name not in found:
+                            found.append(name)
+                    if found:
+                        service_desc = ' + '.join(found)
+
+                # 提取金额
+                if not amount:
+                    match = re.search(r'\$(\d+(?:\.\d+)?)', content)
+                    if match:
+                        val = float(match.group(1))
+                        if val >= 5:
+                            amount = val
+
+                if service_desc and amount:
+                    break
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to extract order info from channel: {e}")
+
+        # 创建表单并预填充
+        modal = OrderDetailsModal(channel=self.channel, customer=customer)
+        if service_desc:
+            modal.service_input.default = service_desc
+        if amount:
+            modal.amount_input.default = str(amount)
+
+        await interaction.response.send_modal(modal)
+
+
+class CreateOrderView(discord.ui.View):
+    """
+    管理员一键创建订单按钮视图
+    - 永久有效（timeout=None），可固定在频道中
+    - 点击时弹出客户选择菜单（Select），然后弹 Modal 填服务和金额
+    - 不禁用按钮，管理员可反复使用（如追加订单）
+    """
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📦 Create Order Channel", style=discord.ButtonStyle.primary, custom_id="create_order")
+    async def create_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ Only admins can create orders.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        channel = interaction.channel
+
+        # 获取所有非 bot 成员
+        try:
+            all_members = [m for m in guild.members if not m.bot]
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch guild members: {e}")
+            await interaction.response.send_message(
+                "❌ Failed to fetch guild members. Please try again.",
+                ephemeral=True
+            )
+            return
+
+        if not all_members:
+            await interaction.response.send_message(
+                "❌ No members found in guild (excluding bots).",
+                ephemeral=True
+            )
+            return
+
+        # 创建客户选择菜单
+        view = CustomerSelectView(channel=channel, guild=guild)
+
+        # 添加选项到 Select（最多 25 个）
+        options = [
+            discord.SelectOption(
+                label=member.display_name[:100],  # Discord 限制 100 字符
+                value=str(member.id),
+                description=f"ID: {member.id}" if len(member.display_name) < 50 else None
+            )
+            for member in all_members[:25]
+        ]
+
+        if not options:
+            await interaction.response.send_message(
+                "❌ No members available for selection.",
+                ephemeral=True
+            )
+            return
+
+        view.customer_select.options = options
+
+        await interaction.response.send_message(
+            "👤 **Select the customer:**",
+            view=view,
+            ephemeral=True
+        )
 
 
 
@@ -1819,22 +2159,161 @@ def _extract_order_info_from_reply(reply: str) -> Optional[Dict]:
     return None
 
 
-async def _send_payment_buttons(channel: discord.TextChannel, customer_id: int, service: str, amount: float):
+def _parse_payment_info_from_text(text: str) -> Optional[Dict]:
+    """
+    从 AI 回复文本中解析金额和服务信息（不依赖 [ORDER_INFO] 标记）。
+    支持解析：
+    - "Total: $75"
+    - "Total: **$75**"
+    - "!confirm-payment @user 75 \"service\""
+    - 服务列表（如 "250 Layers Challenge + All 5 Specialties + 50x Rep Sleeve"）
+    返回 {"service": "...", "amount": ...} 或 None
+    """
+    try:
+        amount = None
+        service = None
+
+        # 1. 提取金额 — 匹配 "Total: $XX" 或 "Total: **$XX**"
+        amount_match = re.search(r'Total[:\s]+\*{0,2}\$([\d.]+)\*{0,2}', text)
+        if amount_match:
+            amount = float(amount_match.group(1))
+
+        # 2. 如果没找到 Total，尝试从 confirm-payment 命令中提取金额
+        if amount is None:
+            cmd_match = re.search(r'confirm-payment\s+@\S+\s+([\d.]+)', text)
+            if cmd_match:
+                amount = float(cmd_match.group(1))
+
+        # 3. 提取服务名 — 从 confirm-payment 命令的引号中提取
+        service_match = re.search(r'confirm-payment\s+@\S+\s+[\d.]+\s+"([^"]+)"', text)
+        if service_match:
+            service = service_match.group(1)
+
+        # 4. 如果没有从命令中提取到服务名，尝试从 Order Summary 中构建
+        if not service:
+            summary_match = re.search(r'Order Summary[:\s]*\n((?:• .+\n?)+)', text)
+            if summary_match:
+                service_lines = summary_match.group(1).strip()
+                service_parts = []
+                for line in service_lines.split('\n'):
+                    line = line.strip().lstrip('• ').strip()
+                    name = re.sub(r'\s*\(\$[\d.]+\)\s*', '', line).strip()
+                    if name:
+                        service_parts.append(name)
+                if service_parts:
+                    service = ' + '.join(service_parts)
+
+        if amount and service:
+            return {"service": service, "amount": amount}
+
+        # 5. 如果有金额但没有服务名，从文本中提取服务关键词
+        if amount and not service:
+            keywords_found = []
+            service_keywords = {
+                '250 challenge': '250 Layers Challenge',
+                '200 challenge': '200 Layers Challenge',
+                '150 challenge': '150 Layers Challenge',
+                '100 challenge': '100 Layers Challenge',
+                'all 5 specialties': 'All 5 Specialties',
+                'all specialization': 'All 5 Specialties',
+                'specialties': 'All 5 Specialties',
+                '300x': '300x Rep Sleeve',
+                '100x': '100x Rep Sleeve',
+                '50x': '50x Rep Sleeve',
+                '99 overall': '99 Overall',
+                'badge': 'Badge Unlock',
+                'rep grind': 'Rep Grind',
+                'grind': 'Rep Grind',
+                'season pass': 'Season Pass',
+                'mt coin': 'MT Coins',
+                'dma': 'DMA Mods',
+            }
+            text_lower = text.lower()
+            for kw, name in service_keywords.items():
+                if kw in text_lower and name not in keywords_found:
+                    keywords_found.append(name)
+            if keywords_found:
+                service = ' + '.join(keywords_found)
+                return {"service": service, "amount": amount}
+
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to parse payment info from text: {e}")
+    return None
+
+
+async def _send_payment_buttons(channel: discord.TextChannel, service: str, amount: float):
     """发送收款确认按钮消息（仅管理员可操作）"""
     view = PaymentConfirmView(
-        customer_id=customer_id,
         service_desc=service,
         amount=amount
     )
     embed = discord.Embed(
-        title="💳 待确认收款",
-        description=f"管理员请确认是否已收到以下订单的款项：",
+        title="💳 Payment Pending Confirmation",
+        description=f"Admin, please confirm payment for this order:",
         color=discord.Color.orange()
     )
-    embed.add_field(name="服务", value=service, inline=False)
-    embed.add_field(name="金额", value=f"${amount:.2f}", inline=True)
-    embed.set_footer(text="⏰ 按钮将在 2 小时后失效 | 仅管理员可操作")
+    embed.add_field(name="Service", value=service, inline=False)
+    embed.add_field(name="Amount", value=f"${amount:.2f}", inline=True)
+    embed.set_footer(text="⏰ Buttons expire in 2 hours | Admins only")
     await channel.send(embed=embed, view=view)
+    return view
+
+
+def parse_order_from_history(history: List[Dict]) -> Tuple[Optional[str], Optional[float]]:
+    """
+    从频道历史中提取最近的服务描述和金额
+    返回: (service_desc, amount) 或 (None, None)
+    """
+    service_desc = None
+    amount = None
+
+    service_keywords = {
+        '250 challenge': '250 Layers Challenge',
+        '200 challenge': '200 Layers Challenge',
+        '150 challenge': '150 Layers Challenge',
+        '100 challenge': '100 Layers Challenge',
+        'all 5 specialties': 'All 5 Specialties',
+        'all specialization': 'All 5 Specialties',
+        '300x': '300x Rep Sleeve',
+        '100x': '100x Rep Sleeve',
+        '50x': '50x Rep Sleeve',
+        '99 overall': '99 Overall',
+        'badge': 'Badge Unlock',
+        'rep grind': 'Rep Grind',
+        'rep sleeve': 'Rep Sleeve',
+        'season pass': 'Season Pass',
+        'mt coin': 'MT Coins',
+        'dma': 'DMA Mods',
+    }
+
+    for msg in reversed(history[-15:]):
+        content = msg.get("content", "")
+        if not content:
+            continue
+        content_lower = content.lower()
+
+        # 提取服务描述（优先匹配更长的关键词）
+        if not service_desc:
+            found = []
+            for kw, name in service_keywords.items():
+                if kw in content_lower and name not in found:
+                    found.append(name)
+            if found:
+                service_desc = ' + '.join(found)
+
+        # 提取金额（匹配 $数字）
+        if not amount:
+            match = re.search(r'\$(\d+(?:\.\d+)?)', content)
+            if match:
+                val = float(match.group(1))
+                # 过滤掉明显不是价格的金额（太小的）
+                if val >= 5:
+                    amount = val
+
+        if service_desc and amount:
+            break
+
+    return service_desc, amount
 
 
 async def migrate_history(source: discord.TextChannel, target: discord.TextChannel, limit: int = 20):
@@ -2055,7 +2534,7 @@ def create_bot() -> commands.Bot:
 
         try:
             # ========== 第二步：异步处理（传入 user_id 以加载用户历史）==========
-            ai_reply, has_order_intent = await ai_service.chat(user_msg, channel_id, user_id=user_id)
+            ai_reply, has_order_intent, payment_view = await ai_service.chat(user_msg, channel_id, user_id=user_id)
 
             # ========== 第二步补充：记录 bot 回复到用户记忆 ==========
             if ai_reply:
@@ -2105,7 +2584,6 @@ def create_bot() -> commands.Bot:
                 try:
                     await _send_payment_buttons(
                         channel=channel,
-                        customer_id=int(user_id),
                         service=str(order_info['service']),
                         amount=float(order_info['amount'])
                     )
@@ -2128,12 +2606,26 @@ def create_bot() -> commands.Bot:
                     remaining = remaining[1900:]
 
                 logger.info(f"📊 Splitting into {len(chunks)} messages")
+                # 第一条消息编辑 status_msg，view 附加到最后一条
                 await status_msg.edit(content=chunks[0])
 
-                for i, chunk in enumerate(chunks[1:], 1):
+                for i, chunk in enumerate(chunks[1:-1], 1):
                     await asyncio.sleep(0.3)
                     await channel.send(chunk)
                     logger.info(f"📤 Sent chunk {i+1}/{len(chunks)}")
+
+                # 最后一条消息（如果有 view 则附加）
+                last_chunk = chunks[-1] if len(chunks) > 1 else None
+                if last_chunk:
+                    await asyncio.sleep(0.3)
+                    await channel.send(last_chunk, view=payment_view)
+                    logger.info(f"📤 Sent final chunk with view={payment_view is not None}")
+                elif payment_view:
+                    # 只有一条消息，直接编辑并附加 view
+                    await status_msg.edit(content=ai_reply, view=payment_view)
+            elif payment_view:
+                # 短消息 + view：编辑 status_msg 并附加 view
+                await status_msg.edit(content=ai_reply, view=payment_view)
             else:
                 await status_msg.edit(content=ai_reply)
 
@@ -2284,6 +2776,43 @@ def create_bot() -> commands.Bot:
         embed.set_footer(text="Ask @bot for more details or type 'order' to start!")
         await ctx.send(embed=embed)
 
+    @bot.command(name="panel")
+    async def order_panel(ctx):
+        """
+        在当前频道发送订单管理面板（带永久按钮）
+        管理员可固定此消息，随时点击创建履约频道
+        用法: !panel
+        """
+        if not ctx.author.guild_permissions.administrator:
+            await ctx.send("❌ Only admins can use this command.")
+            return
+
+        embed = discord.Embed(
+            title="📋 Order Management Panel",
+            description=(
+                "Click the button below to create a fulfillment channel.\n\n"
+                "The bot will automatically detect:\n"
+                "• 👤 **Customer** — from recent messages\n"
+                "• 🎮 **Service** — from conversation keywords\n"
+                "• 💰 **Amount** — from price mentions\n\n"
+                "You can pin this message to keep it at the top!"
+            ),
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text="📌 Right-click this message → Pin Message to keep it visible")
+
+        view = CreateOrderView()
+        msg = await ctx.send(embed=embed, view=view)
+
+        # 尝试自动置顶
+        try:
+            await msg.pin()
+            await ctx.send("✅ Panel pinned to the top of this channel!", delete_after=5)
+        except discord.Forbidden:
+            await ctx.send("⚠️ I don't have permission to pin. Please **right-click** the panel message → **Pin Message**.", delete_after=10)
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to pin panel message: {e}")
+
     @bot.command(name="help")
     async def help_command(ctx):
         """显示帮助"""
@@ -2325,6 +2854,15 @@ def create_bot() -> commands.Bot:
             await ctx.send("❌ This command is only for administrators/finance!")
             return
 
+        # 金额校验
+        try:
+            float_amount = float(amount)
+            if float_amount <= 0:
+                raise ValueError
+        except ValueError:
+            await ctx.send(f"❌ Invalid amount: `{amount}`. Please use a number like `15` or `75.5`")
+            return
+
         try:
             logger.info(f"💳 {ctx.author.name} confirmed payment for {user.name} | Amount: ${amount} | Project: {project}")
 
@@ -2361,9 +2899,23 @@ def create_bot() -> commands.Bot:
             else:
                 await ctx.send(f"❌ Failed to create order for {user.name}")
 
+        except discord.ext.commands.errors.UserNotFound:
+            await ctx.send(f"❌ User not found! Make sure you use a real @mention (not `@user`). Example: `!confirm-payment @username {amount} \"{project or 'service'}\"`")
         except Exception as e:
             logger.error(f"❌ Error confirming payment: {e}", exc_info=True)
             await ctx.send(f"❌ Error: {str(e)[:100]}")
+
+    @confirm_payment_command.error
+    async def confirm_payment_error(ctx, error):
+        """处理 confirm-payment 命令的错误"""
+        if isinstance(error, discord.ext.commands.errors.UserNotFound):
+            await ctx.send('❌ User not found! Please use a real @mention (click the username to mention them).\nExample: `!confirm-payment @username 15 "50x Rep Sleeve"`')
+        elif isinstance(error, discord.ext.commands.errors.MissingRequiredArgument):
+            await ctx.send('❌ Missing arguments! Usage: `!confirm-payment @user <amount> "service description"`\nExample: `!confirm-payment @Legend2k26 15 "50x Rep Sleeve"`')
+        elif isinstance(error, discord.ext.commands.errors.CheckFailure):
+            await ctx.send("❌ This command is only for administrators!")
+        else:
+            await ctx.send(f"❌ Error: {str(error)[:100]}")
 
     @bot.command(name="createorder")
     async def createorder_command(ctx, user: discord.User, *, service_desc: str = "Service"):
