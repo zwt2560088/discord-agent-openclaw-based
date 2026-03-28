@@ -15,6 +15,7 @@ import discord
 import json
 import logging
 import os
+import re
 import sys
 import time
 from aiohttp_socks import ProxyConnector
@@ -22,6 +23,17 @@ from collections import OrderedDict
 from discord.ext import commands
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Tuple
+
+# LangChain ReAct Agent imports (optional - graceful degradation if not available)
+try:
+    from langchain.agents import create_react_agent, AgentExecutor
+    from langchain.tools import tool
+    from langchain.prompts import PromptTemplate
+    LANGCHAIN_AVAILABLE = True
+except ImportError:
+    LANGCHAIN_AVAILABLE = False
+    logger_setup = logging.getLogger("DiscordBot")
+    logger_setup.warning("⚠️ LangChain not installed. ReAct Agent features disabled. Install with: pip install langchain langchain-openai langchain-community")
 
 # 添加 legacy 目录到 Python 路径以导入 RAG Agent
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "legacy"))
@@ -300,6 +312,124 @@ class ContextManager:
 # 全局上下文管理器
 context_manager = ContextManager()
 
+# ====================== LangChain ReAct Agent 工具定义 ======================
+if LANGCHAIN_AVAILABLE:
+    @tool
+    def get_price(service: str, details: str = "") -> str:
+        """
+        查询指定服务的价格信息。
+        参数:
+        - service: 服务名称 (rep, sleeve, 99, challenge, badge, mt, account, etc.)
+        - details: 可选细节
+        """
+        service_lower = service.lower()
+
+        # 价格映射表
+        price_info = {
+            "rep sleeve": {
+                "50x": "$15",
+                "100x": "$21.50",
+                "300x": "$30",
+                "default": "50x: $15 | 100x: $21.50 | 300x: $30"
+            },
+            "rep grind": {
+                "rookie": "$15-42",
+                "starter": "$21-46",
+                "veteran": "$30-50",
+                "legend": "$50-60",
+                "default": "Rookie $15-42 | Starter $21-46 | Veteran $30-50 | Legend $50-60 | Long $70-150"
+            },
+            "challenge": {
+                "250": "$40",
+                "200": "$20",
+                "150": "$15",
+                "100": "$10",
+                "default": "250 Layers $40 | 200 Layers $20 | 150 Layers $15 | 100 Layers $10"
+            },
+            "99 overall": "$15",
+            "99": "$15",
+            "badge": "$15",
+            "specialty": "Single $15 | All 5 $20",
+            "mt coins": "100K $10 | 500K $45 | 1M $80",
+            "mt": "100K $10 | 500K $45 | 1M $80",
+            "season pass": "$15",
+            "dma": "$60/month or $110 permanent",
+            "account": "Pre-built Account $80-100"
+        }
+
+        # 搜索匹配的服务
+        for key, price in price_info.items():
+            if key in service_lower:
+                if isinstance(price, dict):
+                    return price.get(details.lower() if details else "default", price["default"])
+                else:
+                    return f"{key.upper()}: {price}"
+
+        return f"Service '{service}' not found. Try: rep sleeve, rep grind, 99, challenge, badge, mt, account"
+
+    @tool
+    def confirm_payment(order_details: str) -> str:
+        """
+        当用户说已经付款时，解析订单详情，返回汇总金额。
+        参数: order_details - 用户说的订单内容，如 "I paid for 250 all specialization + 50x"
+        """
+        details_lower = order_details.lower()
+        total = 0
+        items = []
+
+        # 解析订单项目
+        if any(x in details_lower for x in ["250", "challenge", "layer"]):
+            items.append("250 Layers Challenge ($40)")
+            total += 40
+
+        if any(x in details_lower for x in ["all 5", "all specialization", "specialty", "specialities"]):
+            items.append("All 5 Specialties ($20)")
+            total += 20
+
+        if "50x" in details_lower:
+            items.append("50x Rep Sleeve ($15)")
+            total += 15
+        elif "100x" in details_lower:
+            items.append("100x Rep Sleeve ($21.50)")
+            total += 21.5
+        elif "300x" in details_lower:
+            items.append("300x Rep Sleeve ($30)")
+            total += 30
+
+        if any(x in details_lower for x in ["99", "overall"]):
+            items.append("99 Overall ($15)")
+            total += 15
+
+        if any(x in details_lower for x in ["grind", "rep rank"]):
+            if "starter" in details_lower:
+                items.append("Rep Grind to Starter ($40)")
+                total += 40
+            else:
+                items.append("Rep Grind ($40)")
+                total += 40
+
+        if items:
+            summary = f"✅ **Payment Confirmed!**\n\n**Order Summary:**\n" + "\n".join(f"• {item}" for item in items) + f"\n\n**Total: ${total}**"
+            return summary
+
+        return f"✅ Payment confirmed for: {order_details}. Awaiting admin to create fulfillment channel."
+
+    @tool
+    def query_knowledge(query: str) -> str:
+        """
+        从 RAG 知识库或本地文件查询信息。
+        参数: query - 查询内容
+        """
+        try:
+            knowledge_file = "./knowledge/NBA2K26_PRICING_STANDARD.md"
+            if os.path.exists(knowledge_file):
+                with open(knowledge_file, "r", encoding="utf-8") as f:
+                    content = f.read()
+                return f"Knowledge base reference available. Query: {query}"
+            return "Knowledge base not available."
+        except Exception as e:
+            return f"Knowledge query failed: {str(e)}"
+
 # ====================== 第三层：异步 AI 处理服务 ======================
 class AIService:
     """
@@ -313,7 +443,9 @@ class AIService:
         self._deepseek_enabled = bool(DEEPSEEK_API_KEY)
         self._use_ai = self._openai_enabled or self._deepseek_enabled
         self._rag_agent = None
-        logger.info(f"AI Services: OpenAI={self._openai_enabled}, DeepSeek={self._deepseek_enabled}")
+        self._react_agent = None
+        self._agent_executor = None
+        logger.info(f"AI Services: OpenAI={self._openai_enabled}, DeepSeek={self._deepseek_enabled}, ReAct={LANGCHAIN_AVAILABLE}")
 
         # 初始化 RAG Agent
         try:
@@ -324,6 +456,138 @@ class AIService:
         except Exception as e:
             logger.warning(f"⚠️ Failed to initialize RAG Agent: {e}")
             logger.info("🔄 Will fall back to simple knowledge base queries")
+
+        # 初始化 LangChain ReAct Agent（如果可用）
+        if LANGCHAIN_AVAILABLE and (self._deepseek_enabled or self._openai_enabled):
+            try:
+                self._init_react_agent()
+                logger.info("✅ LangChain ReAct Agent initialized successfully")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to initialize ReAct Agent: {e}")
+                logger.info("🔄 Will fall back to simple AI responses")
+
+    def _init_react_agent(self):
+        """初始化 LangChain ReAct Agent"""
+        try:
+            from langchain_openai import ChatOpenAI
+
+            # 选择 LLM（优先 DeepSeek，次选 OpenAI）
+            if self._deepseek_enabled:
+                # DeepSeek 通过 OpenAI 兼容接口调用
+                llm = ChatOpenAI(
+                    model="deepseek-chat",
+                    api_key=DEEPSEEK_API_KEY,
+                    base_url="https://api.deepseek.com/v1",
+                    temperature=0.3,
+                    max_tokens=300
+                )
+                logger.info("🔧 ReAct Agent using DeepSeek")
+            else:
+                llm = ChatOpenAI(
+                    model="gpt-4o-mini",
+                    api_key=OPENAI_API_KEY,
+                    temperature=0.3,
+                    max_tokens=300
+                )
+                logger.info("🔧 ReAct Agent using OpenAI")
+
+            # 收集所有工具
+            tools = [get_price, confirm_payment, query_knowledge]
+
+            # 创建 ReAct prompt
+            react_prompt = PromptTemplate.from_template("""You are an intelligent NBA 2K26 customer service assistant with access to tools for checking prices, confirming payments, and querying knowledge base.
+
+IMPORTANT CONTEXT:
+- If user mentions "paid", "paid for", "already paid", "payment confirmed" → Use confirm_payment tool
+- If user asks about price/cost → Use get_price tool
+- If user mentions specific order details → Use confirm_payment tool
+- Always be concise and friendly
+- Include emojis in responses
+
+Available tools:
+{tools}
+
+Use the following format:
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question
+
+Previous conversation context:
+{{chat_history}}
+
+Question: {{input}}
+Thought:{{agent_scratchpad}}""")
+
+            # 创建 ReAct Agent
+            self._react_agent = create_react_agent(llm, tools, react_prompt)
+            self._agent_executor = AgentExecutor(
+                agent=self._react_agent,
+                tools=tools,
+                verbose=False,
+                handle_parsing_errors=True,
+                max_iterations=5
+            )
+
+        except Exception as e:
+            logger.error(f"❌ ReAct Agent initialization failed: {e}", exc_info=True)
+            self._react_agent = None
+            self._agent_executor = None
+
+    async def _call_react_agent(self, user_msg: str, channel_id: str, chat_history: List[Dict]) -> Tuple[str, bool]:
+        """
+        使用 LangChain ReAct Agent 处理用户消息
+        返回: (回复内容, 是否有订单意图)
+        """
+        if not self._agent_executor:
+            return "", False
+
+        try:
+            # 构建历史上下文字符串
+            history_str = "\n".join([f"{msg['role']}: {msg['content'][:50]}" for msg in chat_history[-2:]])
+
+            # 检查是否是支付确认的情景
+            is_payment_context = any(
+                keyword in user_msg.lower()
+                for keyword in ["paid", "payment", "confirmed", "already", "just paid", "已付"]
+            )
+
+            logger.info(f"🤖 ReAct Agent processing: {user_msg[:30]}... (payment_context={is_payment_context})")
+
+            # 同步方式运行 agent（在线程池中）
+            result = await asyncio.to_thread(
+                self._agent_executor.invoke,
+                {
+                    "input": user_msg,
+                    "chat_history": history_str
+                }
+            )
+
+            reply = result.get("output", "").strip()
+
+            # 检查是否包含订单确认信息
+            has_intent = (
+                "[ORDER_INTENT]" in reply or
+                "✅ Payment Confirmed" in reply or
+                is_payment_context
+            )
+
+            # 清理输出
+            reply = reply.replace("[ORDER_INTENT]", "").strip()
+
+            logger.info(f"✅ ReAct Agent reply: {reply[:50]}... (has_intent={has_intent})")
+            return reply, has_intent
+
+        except asyncio.TimeoutError:
+            logger.warning("⏱️ ReAct Agent call timeout")
+            return "", False
+        except Exception as e:
+            logger.error(f"❌ ReAct Agent error: {e}", exc_info=True)
+            return "", False
 
     def _quick_reply(self, user_msg: str) -> Optional[Tuple[str, bool]]:
         """
@@ -370,7 +634,25 @@ class AIService:
             logger.info(f"⚡ Quick reply: {user_msg[:30]}... -> {reply[:30]}...")
             return reply, has_intent
 
-        # ========== 第二步：AI 处理 (<2s) ==========
+        # ========== 第二步：ReAct Agent 处理（如果可用）==========
+        # 优先尝试使用 LangChain ReAct Agent 处理复杂意图
+        if self._agent_executor:
+            try:
+                history = await context_manager.get_context(channel_id)
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to get context: {e}")
+                history = []
+
+            react_reply, react_intent = await self._call_react_agent(user_msg, channel_id, history)
+            if react_reply:  # ReAct Agent 成功处理
+                try:
+                    await context_manager.save_context(channel_id, user_msg, react_reply)
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to save context: {e}")
+                logger.info(f"✅ ReAct Agent handled: {user_msg[:30]}... -> {react_reply[:40]}...")
+                return react_reply, react_intent
+
+        # ========== 第三步：AI 处理 (<2s) ==========
         if not self._use_ai:
             default_reply = "I'm not sure. You can ask about prices (rep, 99, pass, mt, vc) or type !help"
             try:
@@ -710,7 +992,7 @@ def create_bot() -> commands.Bot:
         # 使用词边界匹配，避免误匹配（如 "pass" 误匹配 "password"）
         has_service_keyword = any(
             re.search(r'\b' + re.escape(keyword) + r'\b', user_msg_lower)
-            for keyword in ["rep", "service", "boost", "99", "pass", "mt", "vc", "coin", "help", "order", "buy", "price", "cost", "how much", "want"]
+            for keyword in ["rep", "service", "boost", "99", "pass", "mt", "vc", "coin", "help", "order", "buy", "price", "cost", "how much", "want", "paid", "payment", "confirm"]
         )
 
         # 检查数字 + "x" 模式（如 50x, 100x, 300x）
@@ -775,7 +1057,7 @@ def create_bot() -> commands.Bot:
                 logger.info(f"📦 Purchase intent detected: explicit={has_explicit_order_request}, ai_intent={has_order_intent}")
 
                 # 添加订单信息到 AI 回复
-                order_notice = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💳 **To proceed with your order:**\n1. Review the price above\n2. Choose payment method (Crypto/PayPal/Bank)\n3. Contact admin to confirm payment\n4. Admin will create your order channel\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                order_notice = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💳 **To proceed with your order:**\n1. Review the price above\n2. 🔗 Check our G2G store: https://www.g2g.com/cn/categories/nba-dunk-items?seller=LegendNBA2k\n3. Choose payment method (Crypto/PayPal/Bank)\n4. Contact admin to confirm payment\n5. Admin will create your order channel\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                 ai_reply = ai_reply + order_notice if ai_reply else order_notice
                 logger.info(f"📝 Added order notice to AI reply (awaiting payment confirmation)")
 
