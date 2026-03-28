@@ -1626,7 +1626,6 @@ def _extract_order_info_from_reply(reply: str) -> Optional[Dict]:
     从 AI 回复中提取 [ORDER_INFO:service=...,amount=...] 标记
     返回 {"service": "...", "amount": ...} 或 None
     """
-    import ast
     match = re.search(r'\[ORDER_INFO:\s*(.+?)\s*\]', reply)
     if not match:
         return None
