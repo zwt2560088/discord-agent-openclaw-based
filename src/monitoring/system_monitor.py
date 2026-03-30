@@ -1,285 +1,267 @@
-    def _count_alerts_by_severity(self) -> Dict[str, int]:
-        """按严重程度统计告警"""
-        counts = {'info': 0, 'warning': 0, 'critical': 0}
-        for alert in self.alert_manager.alerts:
-            severity = alert.get('severity', 'info')
-            counts[severity] = counts.get(severity, 0) + 1
-        return counts
+#!/usr/bin/env python3
+"""
+System Monitor — 指标收集 + 持久化到 SQLite + Prometheus 暴露
     
-    def stop(self):
-        """停止监控"""
-        self.monitor_task.stop()
-        self.status_report_task.stop()
+功能:
+1. 定时收集 CPU/内存/磁盘等系统指标
+2. 跟踪业务指标（消息数、LLM 调用、订单数）
+3. 持久化到 SQLite（metrics 表）供 Web Dashboard 读取
+4. 暴露 /metrics 端点（Prometheus 格式）
+"""
 
+import logging
+import os
+import sqlite3
+import time
+from collections import deque
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
-# Discord命令扩展
-class MonitorCommands(commands.Cog):
-    """监控相关命令"""
+logger = logging.getLogger("SystemMonitor")
     
-    def __init__(self, bot: commands.Bot, monitor: BotMonitor):
-        self.bot = bot
-        self.monitor = monitor
+# ==================== 数据库路径 ====================
+DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "bot_context.db")
     
-    @commands.command(name='status')
-    @commands.has_permissions(administrator=True)
-    async def system_status(self, ctx):
-        """查看系统状态"""
-        stats = self.monitor.get_detailed_stats()
         
-        embed = discord.Embed(
-            title="📊 系统状态监控",
-            description="NBA2k26业务系统实时状态",
-            color=discord.Color.blue(),
-            timestamp=datetime.now()
-        )
+class MetricsCollector:
+    """指标收集器 — 收集系统 + 业务指标"""
         
-        # 机器人状态
-        bot_stats = stats['bot']
-        embed.add_field(
-            name="🤖 机器人状态",
-            value=f"运行时间: {bot_stats['uptime_hours']:.1f}h\n"
-                  f"服务器: {bot_stats['guilds_count']}个\n"
-                  f"用户: {bot_stats['users_count']}人\n"
-                  f"命令处理: {bot_stats['commands_processed']}次",
-            inline=False
-        )
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
+        self.start_time = time.time()
+        self._init_db()
         
-        # 系统指标
-        metrics = stats['metrics']
-        embed.add_field(
-            name="💻 系统资源",
-            value=f"CPU使用: {metrics.get('process_cpu_avg', 0):.1f}%\n"
-                  f"内存使用: {metrics.get('process_memory_avg', 0):.1f}%\n"
-                  f"系统CPU: {metrics.get('system_cpu_avg', 0):.1f}%\n"
-                  f"系统内存: {metrics.get('system_memory_avg', 0):.1f}%",
-            inline=True
-        )
+        # 业务计数器
+        self.messages_processed = 0
+        self.commands_processed = 0
+        self.errors_count = 0
+        self.llm_calls = 0
+        self.llm_total_latency = 0.0  # 累计延迟（秒）
+        self.orders_created = 0
         
-        # 告警状态
-        alerts = stats['alerts']
-        embed.add_field(
-            name="🚨 告警状态",
-            value=f"总告警: {alerts['total']}\n"
-                  f"24小时内: {alerts['recent_24h']}\n"
-                  f"严重告警: {alerts['by_severity'].get('critical', 0)}",
-            inline=True
-        )
+        # 内存中的最近指标（用于 Prometheus 端点实时读取）
+        self._recent_metrics: deque = deque(maxlen=100)
         
-        # 错误统计
-        embed.add_field(
-            name="⚠️ 错误统计",
-            value=f"消息处理: {bot_stats['messages_processed']}\n"
-                  f"错误次数: {bot_stats['errors_count']}\n"
-                  f"错误率: {(bot_stats['errors_count'] / max(bot_stats['messages_processed'], 1) * 100):.1f}%",
-            inline=True
-        )
+    def _init_db(self):
+        """创建 metrics 表"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    process_cpu REAL,
+                    process_memory_mb REAL,
+                    system_cpu REAL,
+                    system_memory_mb REAL,
+                    system_disk_percent REAL,
+                    messages_processed INTEGER DEFAULT 0,
+                    errors_count INTEGER DEFAULT 0,
+                    llm_calls INTEGER DEFAULT 0,
+                    llm_avg_latency_ms REAL DEFAULT 0,
+                    orders_created INTEGER DEFAULT 0
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_metrics_timestamp ON metrics(timestamp)")
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to init metrics DB: {e}")
         
-        # 状态指示器
-        status_emoji = "🟢"  # 绿色
-        if alerts['by_severity'].get('critical', 0) > 0:
-            status_emoji = "🔴"  # 红色
-        elif alerts['by_severity'].get('warning', 0) > 0:
-            status_emoji = "🟡"  # 黄色
+    def collect(self) -> Dict:
+        """收集一次系统指标并持久化"""
+        try:
+            import psutil
+            process = psutil.Process(os.getpid())
+            process_cpu = process.cpu_percent(interval=0.1)
+            process_memory = process.memory_info().rss / 1024 / 1024  # MB
+            system_cpu = psutil.cpu_percent(interval=0.1)
+            system_memory = psutil.virtual_memory()
+            system_memory_mb = system_memory.used / 1024 / 1024
+            system_disk = psutil.disk_usage('/').percent
+        except ImportError:
+            process_cpu = 0
+            process_memory = 0
+            system_cpu = 0
+            system_memory_mb = 0
+            system_disk = 0
         
-        embed.add_field(
-            name="📈 整体状态",
-            value=f"{status_emoji} 系统运行正常" if status_emoji == "🟢" else f"{status_emoji} 需要注意",
-            inline=False
-        )
+        avg_llm_latency = (self.llm_total_latency / self.llm_calls * 1000) if self.llm_calls > 0 else 0
         
-        embed.set_footer(text=f"监控指标数: {metrics.get('metrics_count', 0)}")
+        metrics = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "process_cpu": round(process_cpu, 2),
+            "process_memory_mb": round(process_memory, 2),
+            "system_cpu": round(system_cpu, 2),
+            "system_memory_mb": round(system_memory_mb, 2),
+            "system_disk_percent": round(system_disk, 2),
+            "messages_processed": self.messages_processed,
+            "errors_count": self.errors_count,
+            "llm_calls": self.llm_calls,
+            "llm_avg_latency_ms": round(avg_llm_latency, 2),
+            "orders_created": self.orders_created,
+        }
         
-        await ctx.send(embed=embed)
+        self._recent_metrics.append(metrics)
+        self._save_to_db(metrics)
+        return metrics
     
-    @commands.command(name='alerts')
-    @commands.has_permissions(administrator=True)
-    async def show_alerts(self, ctx, hours: int = 24):
-        """查看告警历史"""
-        alerts = self.monitor.alert_manager.get_recent_alerts(hours=hours)
+    def _save_to_db(self, metrics: Dict):
+        """写入 SQLite"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+            c.execute("""
+                INSERT INTO metrics (timestamp, process_cpu, process_memory_mb, system_cpu,
+                    system_memory_mb, system_disk_percent, messages_processed, errors_count,
+                    llm_calls, llm_avg_latency_ms, orders_created)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                metrics["timestamp"], metrics["process_cpu"], metrics["process_memory_mb"],
+                metrics["system_cpu"], metrics["system_memory_mb"], metrics["system_disk_percent"],
+                metrics["messages_processed"], metrics["errors_count"],
+                metrics["llm_calls"], metrics["llm_avg_latency_ms"], metrics["orders_created"]
+            ))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.debug(f"Failed to save metrics: {e}")
         
-        if not alerts:
-            await ctx.send(f"✅ 过去{hours}小时内没有告警")
-            return
+    def get_recent(self, limit: int = 100) -> List[Dict]:
+        """从数据库读取最近的指标"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+            c.execute("""
+                SELECT timestamp, process_cpu, process_memory_mb, system_cpu, system_memory_mb,
+                       system_disk_percent, messages_processed, errors_count,
+                       llm_calls, llm_avg_latency_ms, orders_created
+                FROM metrics ORDER BY id DESC LIMIT ?
+            """, (limit,))
+            rows = c.fetchall()
+            conn.close()
+            return [self._row_to_dict(r) for r in reversed(rows)]
+        except Exception as e:
+            logger.warning(f"Failed to read metrics: {e}")
+            return []
         
-        # 按严重程度分组
-        critical_alerts = [a for a in alerts if a['severity'] == 'critical']
-        warning_alerts = [a for a in alerts if a['severity'] == 'warning']
-        info_alerts = [a for a in alerts if a['severity'] == 'info']
+    def cleanup_old_metrics(self, days: int = 7):
+        """清理旧指标（保留最近 N 天）"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+            cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+            c.execute("DELETE FROM metrics WHERE timestamp < ?", (cutoff,))
+            deleted = c.rowcount
+            conn.commit()
+            conn.close()
+            if deleted > 0:
+                logger.info(f"🧹 Cleaned up {deleted} old metrics records")
+        except Exception as e:
+            logger.debug(f"Metrics cleanup failed: {e}")
         
-        embed = discord.Embed(
-            title=f"🚨 告警历史 ({hours}小时)",
-            description=f"共 {len(alerts)} 条告警记录",
-            color=discord.Color.orange(),
-            timestamp=datetime.now()
-        )
+    @staticmethod
+    def _row_to_dict(row) -> Dict:
+        return {
+            "timestamp": row[0],
+            "process_cpu": row[1],
+            "process_memory_mb": row[2],
+            "system_cpu": row[3],
+            "system_memory_mb": row[4],
+            "system_disk_percent": row[5],
+            "messages_processed": row[6],
+            "errors_count": row[7],
+            "llm_calls": row[8],
+            "llm_avg_latency_ms": row[9],
+            "orders_created": row[10],
+        }
         
-        # 严重告警
-        if critical_alerts:
-            critical_text = "\n".join([
-                f"• {a['name']}: {a['message']} ({datetime.fromtimestamp(a['timestamp']).strftime('%H:%M')})"
-                for a in critical_alerts[:5]  # 只显示最近5条
-            ])
-            if len(critical_alerts) > 5:
-                critical_text += f"\n... 还有 {len(critical_alerts) - 5} 条"
-            embed.add_field(name="🔴 严重告警", value=critical_text, inline=False)
+    # ==================== 业务埋点方法 ====================
         
-        # 警告
-        if warning_alerts:
-            warning_text = "\n".join([
-                f"• {a['name']}: {a['message']} ({datetime.fromtimestamp(a['timestamp']).strftime('%H:%M')})"
-                for a in warning_alerts[:5]
-            ])
-            if len(warning_alerts) > 5:
-                warning_text += f"\n... 还有 {len(warning_alerts) - 5} 条"
-            embed.add_field(name="🟡 警告", value=warning_text, inline=False)
+    def inc_message(self):
+        self.messages_processed += 1
         
-        # 信息
-        if info_alerts:
-            info_count = len(info_alerts)
-            embed.add_field(name="🔵 信息通知", value=f"{info_count} 条信息通知", inline=False)
+    def inc_command(self):
+        self.commands_processed += 1
         
-        embed.set_footer(text=f"显示最近 {len(alerts)} 条告警中的部分")
+    def inc_error(self):
+        self.errors_count += 1
         
-        await ctx.send(embed=embed)
+    def record_llm_call(self, latency_seconds: float):
+        self.llm_calls += 1
+        self.llm_total_latency += latency_seconds
     
-    @commands.command(name='metrics')
-    @commands.has_permissions(administrator=True)
-    async def show_metrics(self, ctx, minutes: int = 30):
-        """查看系统指标"""
-        metrics_history = self.monitor.metrics.get_history(minutes=minutes)
+    def inc_order(self):
+        self.orders_created += 1
         
-        if not metrics_history:
-            await ctx.send(f"❌ 没有找到过去{minutes}分钟的指标数据")
-            return
+    # ==================== Prometheus 格式输出 ====================
         
-        # 计算统计信息
-        cpu_values = [m['process']['cpu_percent'] for m in metrics_history]
-        memory_values = [m['process']['memory_percent'] for m in metrics_history]
+    def to_prometheus(self) -> str:
+        """生成 Prometheus 格式的文本指标"""
+        latest = self._recent_metrics[-1] if self._recent_metrics else {
+            "process_cpu": 0, "process_memory_mb": 0, "system_cpu": 0,
+            "system_memory_mb": 0, "system_disk_percent": 0,
+        }
+        lines = [
+            "# HELP discord_bot_process_cpu_percent Process CPU usage percent",
+            "# TYPE discord_bot_process_cpu_percent gauge",
+            f"discord_bot_process_cpu_percent {latest['process_cpu']}",
+            "",
+            "# HELP discord_bot_process_memory_mb Process memory usage in MB",
+            "# TYPE discord_bot_process_memory_mb gauge",
+            f"discord_bot_process_memory_mb {latest['process_memory_mb']}",
+            "",
+            "# HELP discord_bot_system_cpu_percent System CPU usage percent",
+            "# TYPE discord_bot_system_cpu_percent gauge",
+            f"discord_bot_system_cpu_percent {latest['system_cpu']}",
+            "",
+            "# HELP discord_bot_system_memory_mb System memory usage in MB",
+            "# TYPE discord_bot_system_memory_mb gauge",
+            f"discord_bot_system_memory_mb {latest['system_memory_mb']}",
+            "",
+            "# HELP discord_bot_system_disk_percent System disk usage percent",
+            "# TYPE discord_bot_system_disk_percent gauge",
+            f"discord_bot_system_disk_percent {latest['system_disk_percent']}",
+            "",
+            "# HELP discord_bot_messages_total Total messages processed",
+            "# TYPE discord_bot_messages_total counter",
+            f"discord_bot_messages_total {self.messages_processed}",
+            "",
+            "# HELP discord_bot_commands_total Total commands processed",
+            "# TYPE discord_bot_commands_total counter",
+            f"discord_bot_commands_total {self.commands_processed}",
+            "",
+            "# HELP discord_bot_errors_total Total errors",
+            "# TYPE discord_bot_errors_total counter",
+            f"discord_bot_errors_total {self.errors_count}",
+            "",
+            "# HELP discord_bot_llm_calls_total Total LLM API calls",
+            "# TYPE discord_bot_llm_calls_total counter",
+            f"discord_bot_llm_calls_total {self.llm_calls}",
+            "",
+            "# HELP discord_bot_llm_avg_latency_ms Average LLM call latency in ms",
+            "# TYPE discord_bot_llm_avg_latency_ms gauge",
+            f"discord_bot_llm_avg_latency_ms {(self.llm_total_latency / self.llm_calls * 1000) if self.llm_calls > 0 else 0}",
+            "",
+            "# HELP discord_bot_orders_created_total Total orders created",
+            "# TYPE discord_bot_orders_created_total counter",
+            f"discord_bot_orders_created_total {self.orders_created}",
+            "",
+            "# HELP discord_bot_uptime_seconds Bot uptime in seconds",
+            "# TYPE discord_bot_uptime_seconds gauge",
+            f"discord_bot_uptime_seconds {int(time.time() - self.start_time)}",
+        ]
+        return "\n".join(lines)
         
-        embed = discord.Embed(
-            title=f"📈 系统指标 ({minutes}分钟)",
-            description=f"共 {len(metrics_history)} 条记录",
-            color=discord.Color.green(),
-            timestamp=datetime.now()
-        )
         
-        embed.add_field(
-            name="💻 CPU使用率",
-            value=f"平均: {sum(cpu_values)/len(cpu_values):.1f}%\n"
-                  f"最高: {max(cpu_values):.1f}%\n"
-                  f"最低: {min(cpu_values):.1f}%",
-            inline=True
-        )
+# ==================== 全局单例 ====================
+_metrics_collector: Optional[MetricsCollector] = None
         
-        embed.add_field(
-            name="🧠 内存使用率",
-            value=f"平均: {sum(memory_values)/len(memory_values):.1f}%\n"
-                  f"最高: {max(memory_values):.1f}%\n"
-                  f"最低: {min(memory_values):.1f}%",
-            inline=True
-        )
         
-        # 最新指标
-        latest = metrics_history[-1]
-        embed.add_field(
-            name="⏱️ 最新数据",
-            value=f"时间: {datetime.fromisoformat(latest['datetime']).strftime('%H:%M:%S')}\n"
-                  f"CPU: {latest['process']['cpu_percent']:.1f}%\n"
-                  f"内存: {latest['process']['memory_percent']:.1f}%",
-            inline=True
-        )
-        
-        # 系统信息
-        embed.add_field(
-            name="🖥️ 系统资源",
-            value=f"系统CPU: {latest['system']['cpu_percent']:.1f}%\n"
-                  f"系统内存: {latest['system']['memory_percent']:.1f}%\n"
-                  f"磁盘使用: {latest['system']['disk_percent']:.1f}%",
-            inline=True
-        )
-        
-        # 趋势指示
-        if len(metrics_history) >= 2:
-            recent_avg = sum(cpu_values[-5:]) / min(5, len(cpu_values))
-            older_avg = sum(cpu_values[-10:-5]) / min(5, len(cpu_values)-5)
-            trend = "↗️ 上升" if recent_avg > older_avg else "↘️ 下降" if recent_avg < older_avg else "➡️ 稳定"
-            embed.add_field(name="📊 趋势", value=trend, inline=True)
-        
-        await ctx.send(embed=embed)
-    
-    @commands.command(name='clearcache')
-    @commands.has_permissions(administrator=True)
-    async def clear_cache(self, ctx):
-        """清理监控缓存"""
-        self.monitor.metrics.metrics_history = []
-        self.monitor.alert_manager.alerts = []
-        await ctx.send("✅ 监控缓存已清理")
-
-
-def setup_monitoring(bot: commands.Bot, alert_channel_id: Optional[int] = None) -> BotMonitor:
-    """
-    设置监控系统
-    
-    Args:
-        bot: Discord机器人实例
-        alert_channel_id: 告警频道ID（可选）
-    
-    Returns:
-        BotMonitor实例
-    """
-    monitor = BotMonitor(bot, alert_channel_id)
-    bot.add_cog(MonitorCommands(bot, monitor))
-    
-    # 添加事件监听
-    @bot.event
-    async def on_command_completion(ctx):
-        monitor.increment_command_count()
-    
-    @bot.event
-    async def on_message(message):
-        if not message.author.bot:
-            monitor.increment_message_count()
-    
-    @bot.event
-    async def on_command_error(ctx, error):
-        monitor.increment_error_count()
-        logger.error(f"Command error: {error}")
-    
-    logger.info("监控系统已启动")
-    return monitor
-
-
-if __name__ == "__main__":
-    # 测试代码
-    import asyncio
-    
-    class MockBot:
-        def __init__(self):
-            self.guilds = []
-            self.is_ready_flag = True
-        
-        @property
-        def is_ready(self):
-            return lambda: self.is_ready_flag
-        
-        async def wait_until_ready(self):
-            await asyncio.sleep(0.1)
-    
-    async def test():
-        bot = MockBot()
-        monitor = BotMonitor(bot)
-        
-        # 模拟一些指标
-        for _ in range(5):
-            metrics = monitor.metrics.collect()
-            print(f"CPU: {metrics['process']['cpu_percent']}%, Memory: {metrics['process']['memory_percent']}%")
-            await asyncio.sleep(1)
-        
-        # 获取统计信息
-        stats = monitor.get_detailed_stats()
-        print("\n系统统计:")
-        print(json.dumps(stats, indent=2, ensure_ascii=False))
-        
-        monitor.stop()
-    
-    asyncio.run(test())
+def get_metrics_collector() -> MetricsCollector:
+    """获取全局 MetricsCollector 单例"""
+    global _metrics_collector
+    if _metrics_collector is None:
+        _metrics_collector = MetricsCollector()
+    return _metrics_collector

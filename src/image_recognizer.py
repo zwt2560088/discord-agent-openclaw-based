@@ -10,9 +10,11 @@ import asyncio
 import io
 import json
 import logging
+import os
 import pytesseract
 import re
 from PIL import Image
+from aiohttp_socks import ProxyConnector
 from typing import Optional, Dict
 
 logger = logging.getLogger("DiscordBot.ImageRecognizer")
@@ -31,27 +33,59 @@ class ImageRecognizer:
     """NBA 2K26 游戏截图识别器"""
 
     def __init__(self):
-        self.timeout = 10
-        logger.info("✅ ImageRecognizer initialized (Tesseract OCR)")
+        self.timeout = aiohttp.ClientTimeout(total=60)
+        self._session = None
+        self._proxy = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+        logger.info(f"✅ ImageRecognizer initialized (proxy: {self._proxy})")
 
-    async def download_image(self, image_url: str) -> Optional[Image.Image]:
-        """异步下载 Discord 图片"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url, timeout=self.timeout) as resp:
+    def _get_session(self) -> aiohttp.ClientSession:
+        """获取或创建 aiohttp session（复用连接池）"""
+        if self._session is None or self._session.closed:
+            if self._proxy:
+                connector = ProxyConnector.from_url(self._proxy)
+                logger.info(f"🖼️ Using proxy for image download: {self._proxy}")
+            else:
+                connector = aiohttp.TCPConnector(ssl=False)
+            self._session = aiohttp.ClientSession(
+                connector=connector,
+                timeout=self.timeout,
+                trust_env=False
+            )
+        return self._session
+
+    async def download_image(self, image_url: str, retries: int = 2) -> Optional[Image.Image]:
+        """异步下载 Discord 图片（带重试）"""
+        for attempt in range(retries + 1):
+            try:
+                session = self._get_session()
+                logger.info(f"🖼️ Downloading image (attempt {attempt+1}): {image_url[:80]}...")
+                async with session.get(image_url) as resp:
                     if resp.status != 200:
-                        logger.warning(f"❌ 图片下载失败: {resp.status}")
+                        logger.warning(f"❌ Image download failed: HTTP {resp.status}")
+                        if attempt < retries:
+                            await asyncio.sleep(1)
+                            continue
                         return None
                     image_data = await resp.read()
                     img = Image.open(io.BytesIO(image_data))
-                    logger.info(f"✅ 图片下载成功: {img.size}")
+                    logger.info(f"✅ Image downloaded successfully: {img.size}")
                     return img
-        except asyncio.TimeoutError:
-            logger.error(f"⏱️ 图片下载超时")
-            return None
-        except Exception as e:
-            logger.error(f"❌ 图片下载异常: {e}")
-            return None
+            except asyncio.TimeoutError:
+                logger.warning(f"⏱️ Image download timeout (attempt {attempt+1}): {image_url[:80]}")
+                if attempt < retries:
+                    await asyncio.sleep(1)
+                else:
+                    logger.error(f"❌ Image download timeout after {retries+1} attempts")
+                    return None
+            except Exception as e:
+                logger.error(f"❌ Image download exception: {e}")
+                return None
+        return None
+
+    async def close(self):
+        """关闭 session"""
+        if self._session and not self._session.closed:
+            await self._session.close()
 
     def ocr_extract_text(self, image: Image.Image) -> str:
         """

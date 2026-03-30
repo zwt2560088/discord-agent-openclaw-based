@@ -20,7 +20,6 @@ import re
 import sys
 import time
 from aiohttp import web
-from aiohttp_socks import ProxyConnector
 from collections import OrderedDict
 from datetime import datetime
 from discord.ext import commands
@@ -33,6 +32,7 @@ _bot_cache = []
 # 订单数据库
 try:
     from database import Database as OrderDatabase
+
     _orders_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "orders.db")
     order_db = OrderDatabase(_orders_db_path)
     ORDER_DB_AVAILABLE = True
@@ -48,6 +48,7 @@ try:
     from langchain.tools import tool
     from langchain.prompts import PromptTemplate
     from langchain_openai import ChatOpenAI
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     try:
@@ -56,17 +57,20 @@ except ImportError:
         from langchain.tools import tool
         from langchain.prompts import PromptTemplate
         from langchain.chat_models import ChatOpenAI
+
         LANGCHAIN_AVAILABLE = True
     except ImportError:
         LANGCHAIN_AVAILABLE = False
         logger_setup = logging.getLogger("DiscordBot")
-        logger_setup.warning("⚠️ LangChain not installed. ReAct Agent features disabled. Install with: pip install langchain langchain-openai langchain-community")
+        logger_setup.warning(
+            "⚠️ LangChain not installed. ReAct Agent features disabled. Install with: pip install langchain langchain-openai langchain-community")
 # 添加 src/legacy 目录到 Python 路径以导入 RAG Agent
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "legacy"))
 
 # 导入识图工具
 try:
     from image_recognizer import init_image_recognizer
+
     IMAGE_RECOGNIZER_AVAILABLE = True
 except ImportError:
     IMAGE_RECOGNIZER_AVAILABLE = False
@@ -104,9 +108,9 @@ else:
     logger.warning(f"⚠️  admin_user_ids not configured in .env")
 
 # ====================== Web 管理界面配置 ======================
-KNOWLEDGE_DIR = "./knowledge"                           # 知识库目录
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")        # Web 管理密码
-WEB_PORT = 8081                                         # Web 管理端口
+KNOWLEDGE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "knowledge")  # 知识库目录（项目根目录下）
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")  # Web 管理密码
+WEB_PORT = 8081  # Web 管理端口
 
 # 高并发参数
 MAX_CONCURRENT_TASKS = 20
@@ -241,6 +245,7 @@ QUICK_REPLY_KEYWORDS = {
     }
 }
 
+
 # ====================== 第二层：多频道上下文隔离 + 全量用户记忆管理器 ======================
 class ContextManager:
     """
@@ -249,6 +254,7 @@ class ContextManager:
     2. 用户级全量记忆（user_id）— 所有历史互动，跨频道、跨时间
     记录用户与任何人（bot、管理员、其他用户）的所有互动
     """
+
     def __init__(self):
         self._cache: OrderedDict[str, Dict] = OrderedDict()  # channel_id -> context
         self._max_cache_size = 100  # 最多缓存 100 个频道的上下文
@@ -506,6 +512,7 @@ class ContextManager:
                 logger.warning(f"⚠️ Failed to flush context for {channel_id}: {e}")
         logger.info(f"💾 Flushed {count} channel contexts to database")
 
+
 # 全局上下文管理器
 context_manager = ContextManager()
 
@@ -526,7 +533,8 @@ if LANGCHAIN_AVAILABLE:
         has_combo = any(x in service_lower for x in ["+", "combo", "both", "package", " and ", " with "])
 
         # ========== 50x Rep Sleeve + Level 40 ==========
-        if any(x in service_lower for x in ["50x", "50 x"]) and any(x in service_lower for x in ["lvl40", "level 40", "level40", "lv40"]):
+        if any(x in service_lower for x in ["50x", "50 x"]) and any(
+                x in service_lower for x in ["lvl40", "level 40", "level40", "lv40"]):
             results.append("50x Rep Sleeve + Level 40: **$25**")
 
         # ========== Rep Sleeve ==========
@@ -627,129 +635,132 @@ if LANGCHAIN_AVAILABLE:
 
         return "Service not found. Try: rep sleeve, rep grind, 99 overall, challenge, badge, specialty, mt coins, season pass, dma, account"
 
-@tool
-def confirm_payment(order_details: str, user_id: str = "") -> str:
-    """
-    当管理员或用户确认已付款时，解析订单详情并返回汇总。
-    返回结果包含金额和具体的 !confirm-payment 命令，供管理员执行。
-    参数:
-    - order_details: 订单内容描述，如 "rep grind", "50x rep sleeve", "250 all specialization + 50x"
-    - user_id: 客户的 Discord 用户 ID（从对话上下文中的 CURRENT_USER_ID 获取）
-    """
-    details_lower = order_details.lower()
-    total = 0
-    items = []
 
-    # 解析订单项目
-    # Challenge（按数字优先匹配更大的）
-    if "250" in details_lower and any(x in details_lower for x in ["challenge", "layer", "250"]):
-        items.append("250 Layers Challenge ($40)")
-        total += 40
-    elif "200" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
-        items.append("200 Layers Challenge ($20)")
-        total += 20
-    elif "150" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
-        items.append("150 Layers Challenge ($15)")
-        total += 15
-    elif "100" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
-        items.append("100 Layers Challenge ($10)")
-        total += 10
+    @tool
+    def confirm_payment(order_details: str, user_id: str = "") -> str:
+        """
+        当管理员或用户确认已付款时，解析订单详情并返回汇总。
+        返回结果包含金额和具体的 !confirm-payment 命令，供管理员执行。
+        参数:
+        - order_details: 订单内容描述，如 "rep grind", "50x rep sleeve", "250 all specialization + 50x"
+        - user_id: 客户的 Discord 用户 ID（从对话上下文中的 CURRENT_USER_ID 获取）
+        """
+        details_lower = order_details.lower()
+        total = 0
+        items = []
 
-    # Specialty
-    if any(x in details_lower for x in ["all 5", "all specialization", "specialties", "speciality"]):
-        items.append("All 5 Specialties ($20)")
-        total += 20
-    elif any(x in details_lower for x in ["specialty", "specialisation"]):
-        items.append("Single Specialty ($15)")
-        total += 15
-
-    # ========== 50x Rep Sleeve + Level 40 组合 ==========
-    if any(x in details_lower for x in ["50x", "50 x"]) and any(x in details_lower for x in ["lvl40", "level 40", "level40", "lv40"]):
-        items.append("50x Rep Sleeve + Level 40 ($25)")
-        total += 25
-    # ========== Rep Sleeve（独立） ==========
-    elif "300x" in details_lower:
-        items.append("300x Rep Sleeve ($30)")
-        total += 30
-    elif "100x" in details_lower:
-        items.append("100x Rep Sleeve ($21.50)")
-        total += 21.5
-    elif "50x" in details_lower:
-        items.append("50x Rep Sleeve ($15)")
-        total += 15
-
-    # 99 Overall
-    if any(x in details_lower for x in ["99 overall", "99 ovr", "max overall"]):
-        items.append("99 Overall ($15)")
-        total += 15
-
-    # Badge
-    if any(x in details_lower for x in ["badge", "badges", "hof badge", "gold badge"]):
-        items.append("Badge Unlock ($15)")
-        total += 15
-
-    # Rep Grind
-    if any(x in details_lower for x in ["rep grind", "grind", "rep rank"]):
-        if "legend" in details_lower:
-            items.append("Rep Grind to Legend ($60)")
-            total += 60
-        elif "veteran" in details_lower:
-            items.append("Rep Grind to Veteran ($40)")
+        # 解析订单项目
+        # Challenge（按数字优先匹配更大的）
+        if "250" in details_lower and any(x in details_lower for x in ["challenge", "layer", "250"]):
+            items.append("250 Layers Challenge ($40)")
             total += 40
-        elif "starter" in details_lower:
-            items.append("Rep Grind to Starter ($40)")
-            total += 40
-        elif "rookie" in details_lower:
-            items.append("Rep Grind Rookie ($35)")
-            total += 35
-        else:
-            items.append("Rep Grind ($40)")
-            total += 40
-
-    # Season Pass
-    if any(x in details_lower for x in ["season pass", "season 40"]):
-        items.append("Season Pass ($15)")
-        total += 15
-
-    # MT Coins
-    if any(x in details_lower for x in ["mt coin", "mt "]):
-        if "1m" in details_lower or "1m" in details_lower:
-            items.append("1M MT Coins ($80)")
-            total += 80
-        elif "500k" in details_lower:
-            items.append("500K MT Coins ($45)")
-            total += 45
-        elif "100k" in details_lower:
-            items.append("100K MT Coins ($10)")
+        elif "200" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+            items.append("200 Layers Challenge ($20)")
+            total += 20
+        elif "150" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+            items.append("150 Layers Challenge ($15)")
+            total += 15
+        elif "100" in details_lower and any(x in details_lower for x in ["challenge", "layer"]):
+            items.append("100 Layers Challenge ($10)")
             total += 10
-        else:
-            items.append("MT Coins ($10-80)")
-            total += 10  # 默认最低价
 
-    # DMA
-    if "dma" in details_lower:
-        items.append("DMA Mods ($60-110)")
-        total += 60
+        # Specialty
+        if any(x in details_lower for x in ["all 5", "all specialization", "specialties", "speciality"]):
+            items.append("All 5 Specialties ($20)")
+            total += 20
+        elif any(x in details_lower for x in ["specialty", "specialisation"]):
+            items.append("Single Specialty ($15)")
+            total += 15
 
-    # Account
-    if any(x in details_lower for x in ["account", "pre-built"]):
-        items.append("Pre-built Account ($80-100)")
-        total += 80
+        # ========== 50x Rep Sleeve + Level 40 组合 ==========
+        if any(x in details_lower for x in ["50x", "50 x"]) and any(
+                x in details_lower for x in ["lvl40", "level 40", "level40", "lv40"]):
+            items.append("50x Rep Sleeve + Level 40 ($25)")
+            total += 25
+        # ========== Rep Sleeve（独立） ==========
+        elif "300x" in details_lower:
+            items.append("300x Rep Sleeve ($30)")
+            total += 30
+        elif "100x" in details_lower:
+            items.append("100x Rep Sleeve ($21.50)")
+            total += 21.5
+        elif "50x" in details_lower:
+            items.append("50x Rep Sleeve ($15)")
+            total += 15
 
-    if items:
-        service_str = " + ".join(item.split(" ($")[0] for item in items)
-        # 使用真实 user_id 生成 mention（如果有的话）
-        user_mention = f"<@{user_id}>" if user_id else "@USER"
-        summary = (
-            f"✅ **Payment Confirmed!**\n\n"
-            f"**Order Summary:**\n" + "\n".join(f"• {item}" for item in items) +
-            f"\n\n**Total: ${total}**\n\n"
-            f"📋 **Admin, run this command to create order channel:**\n"
-            f"`!confirm-payment {user_mention} {total} \"{service_str}\"`"
-        )
-        return summary
+        # 99 Overall
+        if any(x in details_lower for x in ["99 overall", "99 ovr", "max overall"]):
+            items.append("99 Overall ($15)")
+            total += 15
 
-    return f"✅ Payment mentioned but no specific service matched in: \"{order_details}\". Admin please run: `!confirm-payment @USER <amount> \"<service>\"` with correct details."
+        # Badge
+        if any(x in details_lower for x in ["badge", "badges", "hof badge", "gold badge"]):
+            items.append("Badge Unlock ($15)")
+            total += 15
+
+        # Rep Grind
+        if any(x in details_lower for x in ["rep grind", "grind", "rep rank"]):
+            if "legend" in details_lower:
+                items.append("Rep Grind to Legend ($60)")
+                total += 60
+            elif "veteran" in details_lower:
+                items.append("Rep Grind to Veteran ($40)")
+                total += 40
+            elif "starter" in details_lower:
+                items.append("Rep Grind to Starter ($40)")
+                total += 40
+            elif "rookie" in details_lower:
+                items.append("Rep Grind Rookie ($35)")
+                total += 35
+            else:
+                items.append("Rep Grind ($40)")
+                total += 40
+
+        # Season Pass
+        if any(x in details_lower for x in ["season pass", "season 40"]):
+            items.append("Season Pass ($15)")
+            total += 15
+
+        # MT Coins
+        if any(x in details_lower for x in ["mt coin", "mt "]):
+            if "1m" in details_lower or "1m" in details_lower:
+                items.append("1M MT Coins ($80)")
+                total += 80
+            elif "500k" in details_lower:
+                items.append("500K MT Coins ($45)")
+                total += 45
+            elif "100k" in details_lower:
+                items.append("100K MT Coins ($10)")
+                total += 10
+            else:
+                items.append("MT Coins ($10-80)")
+                total += 10  # 默认最低价
+
+        # DMA
+        if "dma" in details_lower:
+            items.append("DMA Mods ($60-110)")
+            total += 60
+
+        # Account
+        if any(x in details_lower for x in ["account", "pre-built"]):
+            items.append("Pre-built Account ($80-100)")
+            total += 80
+
+        if items:
+            service_str = " + ".join(item.split(" ($")[0] for item in items)
+            # 使用真实 user_id 生成 mention（如果有的话）
+            user_mention = f"<@{user_id}>" if user_id else "@USER"
+            summary = (
+                    f"✅ **Payment Confirmed!**\n\n"
+                    f"**Order Summary:**\n" + "\n".join(f"• {item}" for item in items) +
+                    f"\n\n**Total: ${total}**\n\n"
+                    f"📋 **Admin, run this command to create order channel:**\n"
+                    f"`!confirm-payment {user_mention} {total} \"{service_str}\"`"
+            )
+            return summary
+
+        return f"✅ Payment mentioned but no specific service matched in: \"{order_details}\". Admin please run: `!confirm-payment @USER <amount> \"<service>\"` with correct details."
+
 
     @tool
     def send_payment_confirmation(user_id: str, amount: float, service_desc: str, channel_id: str) -> str:
@@ -804,6 +815,7 @@ def confirm_payment(order_details: str, user_id: str = "") -> str:
         except Exception as e:
             return f"Failed to send payment confirmation: {str(e)}"
 
+
     @tool
     def query_knowledge(query: str) -> str:
         """
@@ -819,6 +831,55 @@ def confirm_payment(order_details: str, user_id: str = "") -> str:
             return "Knowledge base not available."
         except Exception as e:
             return f"Knowledge query failed: {str(e)}"
+
+    @tool
+    def add_knowledge(service_name: str, content: str, target_file: str = "") -> str:
+        """
+        将内容（如 G2G 链接、产品信息等）添加到知识库文件。
+        参数:
+        - service_name: 服务名称（如 "Taz Face Custom Build"）
+        - content: 要添加的内容（如 G2G 链接、描述等）
+        - target_file: 可选的目标文件路径（相对于 knowledge 目录），默认追加到 pricing/g2g-products.md
+        """
+        try:
+            if not target_file:
+                target_file = "pricing/g2g-products.md"
+            # 确保 target_file 以 .md 结尾
+            if not target_file.endswith(".md"):
+                target_file += ".md"
+            filepath = os.path.join(KNOWLEDGE_DIR, target_file)
+            # 自动创建中间目录
+            dirpath = os.path.dirname(filepath)
+            if dirpath and not os.path.exists(dirpath):
+                os.makedirs(dirpath, exist_ok=True)
+            # 构建要添加的内容
+            entry = f"\n## {service_name}\n{content}\n"
+            # 如果文件存在，检查是否已经有同名条目
+            if os.path.exists(filepath):
+                with open(filepath, "r", encoding="utf-8") as f:
+                    existing = f.read()
+                if f"## {service_name}" in existing:
+                    # 替换已有条目
+                    import re
+                    pattern = rf"(## {re.escape(service_name)}\n.*?)(?=\n## |\Z)"
+                    new_content = re.sub(pattern, entry.strip() + "\n", existing, flags=re.DOTALL)
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                    return f"✅ Updated existing entry for '{service_name}' in {target_file}"
+                else:
+                    # 追加到文件末尾
+                    with open(filepath, "a", encoding="utf-8") as f:
+                        f.write(entry)
+                    return f"✅ Added new entry for '{service_name}' to {target_file}"
+            else:
+                # 创建新文件
+                header = f"# G2G Products & Links\n\nAuto-maintained by Legend's Agent.\n\n"
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(header + entry)
+                return f"✅ Created new file {target_file} and added entry for '{service_name}'"
+        except Exception as e:
+            return f"❌ Failed to add knowledge: {str(e)}"
+
 
     @tool
     def check_order_status(user_id: str = "", service_desc: str = "") -> str:
@@ -843,12 +904,12 @@ def confirm_payment(order_details: str, user_id: str = "") -> str:
             order_keywords = ["payment", "paid", "order", "$", "confirm", "buy", "fulfillment"]
 
             c.execute("""
-                SELECT content, role, author_name, channel_name, timestamp
-                FROM user_memory
-                WHERE user_id = ?
-                ORDER BY timestamp DESC
-                LIMIT 20
-            """, (user_id,))
+                    SELECT content, role, author_name, channel_name, timestamp
+                    FROM user_memory
+                    WHERE user_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 20
+                """, (user_id,))
             rows = c.fetchall()
             conn.close()
 
@@ -881,6 +942,7 @@ def confirm_payment(order_details: str, user_id: str = "") -> str:
         except Exception as e:
             return f"Failed to check order status: {str(e)}"
 
+
 # ====================== 第三层：异步 AI 处理服务 ======================
 class AIService:
     """
@@ -889,6 +951,7 @@ class AIService:
     2. AI 智能处理 (<2s)
     支持 OpenAI + DeepSeek 双引擎
     """
+
     def __init__(self):
         self._openai_enabled = bool(OPENAI_API_KEY)
         self._deepseek_enabled = bool(DEEPSEEK_API_KEY)
@@ -896,12 +959,13 @@ class AIService:
         self._rag_agent = None
         self._react_agent = None
         self._agent_executor = None
-        logger.info(f"AI Services: OpenAI={self._openai_enabled}, DeepSeek={self._deepseek_enabled}, ReAct={LANGCHAIN_AVAILABLE}")
+        logger.info(
+            f"AI Services: OpenAI={self._openai_enabled}, DeepSeek={self._deepseek_enabled}, ReAct={LANGCHAIN_AVAILABLE}")
 
         # 初始化 RAG Agent
         try:
             from rag_agent import RAGAgent
-            knowledge_dir = "./knowledge"  # 使用 knowledge 目录
+            knowledge_dir = KNOWLEDGE_DIR  # 使用项目根目录下的 knowledge 目录
             self._rag_agent = RAGAgent(api_key=DEEPSEEK_API_KEY or "", knowledge_dir=knowledge_dir)
             logger.info("✅ RAG Agent initialized successfully")
         except Exception as e:
@@ -943,7 +1007,7 @@ class AIService:
                 logger.info("🔧 ReAct Agent using OpenAI")
 
             # 收集所有工具
-            tools = [get_price, confirm_payment, query_knowledge, check_order_status, send_payment_confirmation]
+            tools = [get_price, confirm_payment, query_knowledge, add_knowledge, check_order_status, send_payment_confirmation]
 
             # 创建 ReAct prompt
             react_prompt = PromptTemplate.from_template("""You are an intelligent NBA 2K26 customer service assistant with COMPLETE MEMORY of every user's past interactions.
@@ -990,6 +1054,14 @@ UNDERSTANDING USER INTENT:
 - "i want to talk to admin" / "no bot" / "real person" → User wants human help. Say the admin has been notified and stop. Do NOT try to sell.
 - "i want rep grind" → Order intent → get_price("rep grind")
 - "how much for 99" → Price query → get_price("99 overall")
+
+KNOWLEDGE BASE MANAGEMENT (add_knowledge tool):
+- When admin asks you to "add link to knowledge base", "save this link", "put it on knowledge base", "remember this" with a URL → Use add_knowledge
+- Parameters: service_name (what product/service the link is for), content (the link URL and any description), target_file (optional)
+- Example: Admin says "put this link on knowledge base: https://g2g.com/.../G1774857930235UP for taz face custom build"
+  → Action: add_knowledge, Action Input: service_name="Taz Face Custom Build", content="G2G Link: https://g2g.com/.../G1774857930235UP"
+- Only admin/owner messages should trigger add_knowledge — NEVER add customer messages to knowledge base
+- After adding, confirm what was saved and where
 
 DISTINGUISHING CURRENT vs HISTORY ORDERS:
 - If user just asked about a service (e.g., "50x"), and then says "paid" → This is a CURRENT order for 50x
@@ -1094,6 +1166,15 @@ Final Answer: ✅ **Combo Order: $75** 🎯
 
 I've sent the payment confirmation! 💳 Complete payment and the admin will create your order channel.
 
+Example 8 - Admin adds link to knowledge base:
+Question: [ADMIN] put this link on knowledge base: https://www.g2g.com/cn/categories/nba-dunk-items/offer/G1774857930235UP?seller=LegendNBA2k this is for taz face custom build
+Thought: Admin wants me to save a G2G link for "Taz Face Custom Build" to the knowledge base. I should use add_knowledge.
+Action: add_knowledge
+Action Input: service_name=Taz Face Custom Build, content=G2G Link: https://www.g2g.com/cn/categories/nba-dunk-items/offer/G1774857930235UP?seller=LegendNBA2k
+Observation: ✅ Added new entry for 'Taz Face Custom Build' to pricing/g2g-products.md
+Thought: I now know the final answer.
+Final Answer: ✅ Saved! 📝 **Taz Face Custom Build** G2G link has been added to `pricing/g2g-products.md`. I'll reference it when customers ask about this service. 👍
+
 Available tools:
 {tools}
 
@@ -1109,8 +1190,8 @@ Final Answer: the final answer to the original input question
 
 {chat_history}
 
-Question: {{input}}
-Thought:{{agent_scratchpad}}""")
+Question: {input}
+Thought: {agent_scratchpad}""")
 
             # 创建 ReAct Agent
             self._react_agent = create_react_agent(llm, tools, react_prompt)
@@ -1127,7 +1208,8 @@ Thought:{{agent_scratchpad}}""")
             self._react_agent = None
             self._agent_executor = None
 
-    async def _call_react_agent(self, user_msg: str, channel_id: str, chat_history: List[Dict], user_memory_summary: str = "", user_id: str = "") -> Tuple[str, bool]:
+    async def _call_react_agent(self, user_msg: str, channel_id: str, chat_history: List[Dict],
+                                user_memory_summary: str = "", user_id: str = "") -> Tuple[str, bool]:
         """
         使用 LangChain ReAct Agent 处理用户消息
         返回: (回复内容, 是否有订单意图)
@@ -1186,7 +1268,8 @@ Thought:{{agent_scratchpad}}""")
                     extracted = _parse_payment_info_from_text(reply)
                 if extracted:
                     reply += f"\n[ORDER_INFO:service={extracted['service']},amount={extracted['amount']}]"
-                    logger.info(f"💳 Auto-appended ORDER_INFO: service={extracted['service']}, amount={extracted['amount']}")
+                    logger.info(
+                        f"💳 Auto-appended ORDER_INFO: service={extracted['service']}, amount={extracted['amount']}")
 
             logger.info(f"✅ ReAct Agent reply: {reply[:50]}... (has_intent={has_intent})")
             return reply, has_intent
@@ -1215,7 +1298,8 @@ Thought:{{agent_scratchpad}}""")
         # 所有其他消息交给 AI 处理
         return None
 
-    async def chat(self, user_msg: str, channel_id: str, user_id: str = None) -> Tuple[str, bool, Optional[discord.ui.View]]:
+    async def chat(self, user_msg: str, channel_id: str, user_id: str = None) -> Tuple[
+        str, bool, Optional[discord.ui.View]]:
         """
         智能对话处理流程
         返回: (回复内容, 是否有订单意图, 可选的按钮视图)
@@ -1253,7 +1337,7 @@ Thought:{{agent_scratchpad}}""")
         # 例如客户说 "I want to order", "yes im ready", "let's go" 等
         # 但不包含 "paid"/"sent"（那些已在上面处理）
         purchase_only_keywords = ["i want to order", "let's go", "yes im ready", "im ready", "i'm ready",
-                                   "order now", "start order", "create order", "下单", "购买"]
+                                  "order now", "start order", "create order", "下单", "购买"]
         if any(kw in user_msg_lower for kw in purchase_only_keywords):
             try:
                 history = await context_manager.get_context(channel_id)
@@ -1295,7 +1379,9 @@ Thought:{{agent_scratchpad}}""")
                 logger.warning(f"⚠️ Failed to get context: {e}")
                 history = []
 
-            react_reply, react_intent = await self._call_react_agent(user_msg, channel_id, history, user_memory_summary=user_memory_summary, user_id=user_id)
+            react_reply, react_intent = await self._call_react_agent(user_msg, channel_id, history,
+                                                                     user_memory_summary=user_memory_summary,
+                                                                     user_id=user_id)
             if react_reply:  # ReAct Agent 成功处理
                 try:
                     await context_manager.save_context(channel_id, user_msg, react_reply)
@@ -1410,19 +1496,25 @@ Examples:
 
                         # 匹配 "50x", "100x", "300x" 等规格
                         if any(x in user_msg_lower for x in ["50x", "100x", "300x", "sleeve"]):
-                            sleeve_match = knowledge_content[knowledge_content.find("## 👕 REP SLEEVE"):knowledge_content.find("## 💰 OTHER SERVICES")]
+                            sleeve_match = knowledge_content[
+                                           knowledge_content.find("## 👕 REP SLEEVE"):knowledge_content.find(
+                                               "## 💰 OTHER SERVICES")]
                             if sleeve_match:
                                 relevant_sections.append(sleeve_match)
 
                         # 匹配 "grind", "rep", "rookie", "starter" 等等级
                         if any(x in user_msg_lower for x in ["grind", "rookie", "starter", "veteran", "legend"]):
-                            grind_match = knowledge_content[knowledge_content.find("## 👑 REPUTATION RANK GRINDS"):knowledge_content.find("## 💎 FINISHED ACCOUNTS")]
+                            grind_match = knowledge_content[
+                                          knowledge_content.find("## 👑 REPUTATION RANK GRINDS"):knowledge_content.find(
+                                              "## 💎 FINISHED ACCOUNTS")]
                             if grind_match:
                                 relevant_sections.append(grind_match)
 
                         # 匹配 "challenge", "99", "badge" 等服务
                         if any(x in user_msg_lower for x in ["challenge", "99", "badge", "overall"]):
-                            other_match = knowledge_content[knowledge_content.find("## 🌟 OVERALL"):knowledge_content.find("## 🔥 HOT DEALS")]
+                            other_match = knowledge_content[
+                                          knowledge_content.find("## 🌟 OVERALL"):knowledge_content.find(
+                                              "## 🔥 HOT DEALS")]
                             if other_match:
                                 relevant_sections.append(other_match)
 
@@ -1493,7 +1585,8 @@ Examples:
                     "max_tokens": 300
                 }
 
-                async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                async with session.post(url, json=payload, headers=headers,
+                                        timeout=aiohttp.ClientTimeout(total=8)) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         reply = data["choices"][0]["message"]["content"].strip()
@@ -1573,6 +1666,7 @@ Examples:
             logger.error(f"❌ DeepSeek call failed: {e}", exc_info=True)
             return "", False
 
+
 # AI 服务单例
 ai_service = AIService()
 
@@ -1583,6 +1677,7 @@ concurrency_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
 # 用户限流缓存：(user_id -> last_request_time)
 user_rate_limit: Dict[int, float] = {}
 
+
 # ====================== 知识库 Web 管理界面 ======================
 
 def verify_auth(request):
@@ -1591,6 +1686,7 @@ def verify_auth(request):
         return True
     auth = request.headers.get("Authorization", "")
     return auth == f"Bearer {ADMIN_PASSWORD}"
+
 
 async def admin_page(request):
     """管理界面 HTML"""
@@ -1687,11 +1783,17 @@ async def admin_page(request):
                             listDiv.innerHTML = '<div style="padding: 10px; color: #999;">No files found</div>';
                             return;
                         }
-                        data.forEach(file => {
+                        data.forEach(item => {
                             const div = document.createElement('div');
                             div.className = 'file-item';
-                            div.textContent = file;
-                            div.onclick = () => loadFile(file);
+                            // 显示文件夹图标 + 相对路径
+                            const parts = item.name.split('/');
+                            const basename = parts.pop();
+                            const folder = parts.join('/');
+                            div.innerHTML = folder
+                                ? '<div style="font-size:12px;color:#999;">📁 ' + folder + '/</div><div>' + basename + '</div>'
+                                : '<div>' + item.name + '</div>';
+                            div.onclick = () => loadFile(item.name);
                             listDiv.appendChild(div);
                         });
                     }
@@ -1708,7 +1810,10 @@ async def admin_page(request):
                         document.getElementById('editor').value = data.content;
                         document.getElementById('filenameDisplay').textContent = filename;
                         document.querySelectorAll('.file-item').forEach(el => {
-                            el.classList.toggle('active', el.textContent === filename);
+                            // 获取文件名（最后一个 div 的文本内容）
+                            const nameEl = el.querySelectorAll('div');
+                            const name = nameEl.length > 1 ? nameEl[nameEl.length - 1].textContent : nameEl[0]?.textContent || '';
+                            el.classList.toggle('active', name === filename.split('/').pop());
                         });
                     }
                 } catch (e) {
@@ -1774,24 +1879,32 @@ async def admin_page(request):
     '''
     return web.Response(text=html, content_type='text/html')
 
+
 async def list_files(request):
-    """列出所有知识库文件"""
+    """列出所有知识库文件（递归子目录）"""
     if not verify_auth(request):
         return web.Response(status=401, text="Unauthorized")
     files = []
     for ext in ["md", "txt"]:
-        for path in glob.glob(os.path.join(KNOWLEDGE_DIR, f"*.{ext}")):
-            files.append(os.path.basename(path))
-    return web.json_response(sorted(files))
+        for path in glob.glob(os.path.join(KNOWLEDGE_DIR, f"**/*.{ext}"), recursive=True):
+            # 返回相对于 KNOWLEDGE_DIR 的路径，如 "pricing/g2g-pricing.md"
+            rel = os.path.relpath(path, KNOWLEDGE_DIR)
+            size = os.path.getsize(path)
+            files.append({"name": rel, "size": size})
+    return web.json_response(sorted(files, key=lambda x: x["name"]))
+
 
 async def get_file(request):
-    """获取文件内容"""
+    """获取文件内容（支持子目录路径）"""
     if not verify_auth(request):
         return web.Response(status=401, text="Unauthorized")
     filename = request.match_info.get("filename", "")
-    if not filename or ".." in filename or "/" in filename:
+    if not filename or ".." in filename or filename.startswith("/"):
         return web.Response(status=400, text="Invalid filename")
     filepath = os.path.join(KNOWLEDGE_DIR, filename)
+    # 安全检查：确保路径在 KNOWLEDGE_DIR 内
+    if not os.path.realpath(filepath).startswith(os.path.realpath(KNOWLEDGE_DIR)):
+        return web.Response(status=400, text="Invalid path")
     if not os.path.exists(filepath):
         return web.Response(status=404, text="File not found")
     try:
@@ -1801,17 +1914,25 @@ async def get_file(request):
     except Exception as e:
         return web.Response(status=500, text=str(e))
 
+
 async def save_file(request):
-    """保存文件内容"""
+    """保存文件内容（支持子目录路径，自动创建中间目录）"""
     if not verify_auth(request):
         return web.Response(status=401, text="Unauthorized")
     try:
         data = await request.json()
         filename = data.get("filename", "")
         content = data.get("content", "")
-        if not filename or ".." in filename or "/" in filename:
+        if not filename or ".." in filename or filename.startswith("/"):
             return web.Response(status=400, text="Invalid filename")
         filepath = os.path.join(KNOWLEDGE_DIR, filename)
+        # 安全检查：确保路径在 KNOWLEDGE_DIR 内
+        if not os.path.realpath(filepath).startswith(os.path.realpath(KNOWLEDGE_DIR)):
+            return web.Response(status=400, text="Invalid path")
+        # 自动创建中间目录
+        dirpath = os.path.dirname(filepath)
+        if dirpath and not os.path.exists(dirpath):
+            os.makedirs(dirpath, exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
         logger.info(f"✅ Web save: {filename} updated")
@@ -1820,12 +1941,14 @@ async def save_file(request):
         logger.error(f"❌ Web save failed: {e}")
         return web.Response(status=500, text=str(e))
 
+
 async def rebuild_vectorstore(request):
     """触发向量库重建（后台任务）"""
     if not verify_auth(request):
         return web.Response(status=401, text="Unauthorized")
     asyncio.create_task(_rebuild_background())
     return web.json_response({"status": "rebuilding", "message": "Vector store rebuild started in background."})
+
 
 async def _rebuild_background():
     """后台重建向量库"""
@@ -1839,14 +1962,258 @@ async def _rebuild_background():
     except Exception as e:
         logger.error(f"❌ Web rebuild failed: {e}", exc_info=True)
 
+
+async def api_list_users(request):
+    """API: 列出所有有记忆记录的用户"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    try:
+        import sqlite3
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_context.db")
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute("""
+            SELECT user_id, author_name, COUNT(*) as msg_count, MAX(timestamp) as last_active
+            FROM user_memory
+            GROUP BY user_id
+            ORDER BY last_active DESC
+            LIMIT 100
+        """)
+        rows = c.fetchall()
+        conn.close()
+        users = []
+        for row in rows:
+            ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(row[3]))
+            users.append({
+                "user_id": row[0],
+                "name": row[1] or row[0],
+                "msg_count": row[2],
+                "last_active": ts,
+                "last_ts": row[3]
+            })
+        return web.json_response(users)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_user_history(request):
+    """API: 获取指定用户的完整对话历史"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    user_id = request.match_info.get("user_id", "")
+    limit = int(request.query.get("limit", "100"))
+    if not user_id:
+        return web.json_response({"error": "user_id required"}, status=400)
+    try:
+        import sqlite3
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_context.db")
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute("""
+            SELECT role, content, author_name, channel_id, channel_name, timestamp
+            FROM user_memory
+            WHERE user_id = ?
+            ORDER BY timestamp ASC
+            LIMIT ?
+        """, (user_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        history = []
+        for row in rows:
+            ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(row[5]))
+            history.append({
+                "role": row[0],
+                "content": row[1],
+                "author_name": row[2],
+                "channel_id": row[3],
+                "channel_name": row[4],
+                "timestamp": ts,
+                "ts": row[5]
+            })
+        return web.json_response(history)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def history_page(request):
+    """用户对话历史管理界面"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+
+    html = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Conversation History</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+            .header h1 { font-size: 22px; }
+            .header a { color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 6px; }
+            .header a:hover { background: rgba(255,255,255,0.3); }
+            .container { display: flex; height: calc(100vh - 70px); }
+            .sidebar { width: 300px; background: #16213e; border-right: 1px solid #0f3460; overflow-y: auto; }
+            .sidebar .search { padding: 12px; }
+            .sidebar .search input { width: 100%; padding: 10px; border: 1px solid #0f3460; border-radius: 6px; background: #1a1a2e; color: #eee; font-size: 14px; }
+            .user-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid #0f3460; transition: background 0.2s; }
+            .user-item:hover { background: #0f3460; }
+            .user-item.active { background: #667eea; }
+            .user-item .name { font-weight: bold; font-size: 14px; }
+            .user-item .meta { font-size: 12px; color: #aaa; margin-top: 4px; }
+            .main { flex: 1; display: flex; flex-direction: column; background: #1a1a2e; }
+            .main-header { padding: 16px 20px; background: #16213e; border-bottom: 1px solid #0f3460; }
+            .main-header h2 { font-size: 18px; }
+            .main-header .info { font-size: 13px; color: #aaa; margin-top: 4px; }
+            .history { flex: 1; overflow-y: auto; padding: 16px 20px; }
+            .msg { margin-bottom: 12px; display: flex; gap: 12px; }
+            .msg-role { font-size: 12px; font-weight: bold; padding: 4px 10px; border-radius: 12px; white-space: nowrap; height: fit-content; }
+            .msg-role.user { background: #007bff; color: white; }
+            .msg-role.admin { background: #28a745; color: white; }
+            .msg-role.assistant { background: #667eea; color: white; }
+            .msg-role.system { background: #6c757d; color: white; }
+            .msg-bubble { background: #16213e; padding: 10px 14px; border-radius: 8px; flex: 1; max-width: 80%; }
+            .msg-content { font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+            .msg-meta { font-size: 11px; color: #666; margin-top: 6px; }
+            .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: #666; font-size: 16px; }
+            .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>💬 Conversation History</h1>
+            <a href="/admin">📚 Knowledge Base</a>
+        </div>
+        <div class="container">
+            <div class="sidebar">
+                <div class="search">
+                    <input type="text" id="searchInput" placeholder="🔍 Search user ID or name..." oninput="filterUsers()">
+                </div>
+                <div id="userList"></div>
+            </div>
+            <div class="main">
+                <div class="main-header" id="mainHeader" style="display:none;">
+                    <h2 id="userName">-</h2>
+                    <div class="info" id="userInfo">-</div>
+                </div>
+                <div class="history" id="historyDiv">
+                    <div class="empty-state">
+                        <div class="icon">💬</div>
+                        <div>Select a user from the left to view conversation history</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            const password = localStorage.getItem('admin_pwd') || prompt("Enter admin password:", "");
+            localStorage.setItem('admin_pwd', password);
+            const headers = password ? { 'Authorization': `Bearer ${password}` } : {};
+            let allUsers = [];
+            let currentUserId = null;
+
+            async function fetchJSON(url) {
+                const res = await fetch(url, { headers });
+                if (res.status === 401) { alert("Unauthorized"); return null; }
+                if (!res.ok) throw new Error(`${res.status}`);
+                return await res.json();
+            }
+
+            async function loadUsers() {
+                try {
+                    allUsers = await fetchJSON('/admin/api/users') || [];
+                    renderUsers(allUsers);
+                } catch (e) { console.error(e); }
+            }
+
+            function renderUsers(users) {
+                const div = document.getElementById('userList');
+                if (!users.length) { div.innerHTML = '<div style="padding:20px;color:#666;">No users found</div>'; return; }
+                div.innerHTML = users.map(u => {
+                    const shortId = u.user_id.length > 12 ? u.user_id.substring(0, 12) + '...' : u.user_id;
+                    const displayName = u.name !== u.user_id ? u.name : shortId;
+                    return `
+                    <div class="user-item ${u.user_id === currentUserId ? 'active' : ''}" onclick="selectUser('${u.user_id}')">
+                        <div class="name">${displayName}</div>
+                        <div class="meta">🆔 ${u.user_id}</div>
+                        <div class="meta">${u.msg_count} msgs · ${u.last_active}</div>
+                    </div>`;
+                }).join('');
+            }
+
+            function filterUsers() {
+                const q = document.getElementById('searchInput').value.toLowerCase();
+                const filtered = allUsers.filter(u =>
+                    u.user_id.toLowerCase().includes(q) || u.name.toLowerCase().includes(q)
+                );
+                renderUsers(filtered);
+            }
+
+            async function selectUser(userId) {
+                currentUserId = userId;
+                renderUsers(allUsers.filter(u => {
+                    const q = document.getElementById('searchInput').value.toLowerCase();
+                    return !q || u.user_id.toLowerCase().includes(q) || u.name.toLowerCase().includes(q);
+                }));
+                document.getElementById('mainHeader').style.display = 'block';
+                const user = allUsers.find(u => u.user_id === userId);
+                document.getElementById('userName').textContent = user ? user.name : userId;
+                document.getElementById('userInfo').textContent = `ID: ${userId} · ${user ? user.msg_count + ' messages' : ''}`;
+
+                const historyDiv = document.getElementById('historyDiv');
+                historyDiv.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><div>Loading...</div></div>';
+
+                try {
+                    const msgs = await fetchJSON(`/admin/api/user/${encodeURIComponent(userId)}?limit=200`) || [];
+                    if (!msgs.length) {
+                        historyDiv.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div>No conversation history</div></div>';
+                        return;
+                    }
+                    historyDiv.innerHTML = msgs.map(m => {
+                        const roleClass = m.role === 'admin' ? 'admin' : m.role === 'user' ? 'user' : m.role === 'assistant' ? 'assistant' : 'system';
+                        const roleLabel = m.role === 'admin' ? '👤 Admin' : m.role === 'user' ? '💬 User' : m.role === 'assistant' ? '🤖 Bot' : '⚙️ System';
+                        const channelInfo = m.channel_name ? `#${m.channel_name}` : '';
+                        return `
+                            <div class="msg">
+                                <div class="msg-role ${roleClass}">${roleLabel}</div>
+                                <div class="msg-bubble">
+                                    <div class="msg-content">${escapeHtml(m.content)}</div>
+                                    <div class="msg-meta">${m.timestamp} ${channelInfo} ${m.author_name ? '· ' + m.author_name : ''}</div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                    historyDiv.scrollTop = historyDiv.scrollHeight;
+                } catch (e) {
+                    historyDiv.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div>Error: ${e.message}</div></div>`;
+                }
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            loadUsers();
+        </script>
+    </body>
+    </html>
+    '''
+    return web.Response(text=html, content_type='text/html')
+
+
 def start_web_server():
     """启动后台 Web 服务器"""
     app = web.Application()
     app.router.add_get('/admin', admin_page)
     app.router.add_get('/admin/files', list_files)
-    app.router.add_get('/admin/file/{filename}', get_file)
+    app.router.add_get('/admin/file/{filename:.+}', get_file)
     app.router.add_post('/admin/save', save_file)
     app.router.add_post('/admin/rebuild', rebuild_vectorstore)
+    app.router.add_get('/admin/history', history_page)
+    app.router.add_get('/admin/api/users', api_list_users)
+    app.router.add_get('/admin/api/user/{user_id}', api_user_history)
 
     async def run_web_server():
         runner = web.AppRunner(app)
@@ -1857,6 +2224,7 @@ def start_web_server():
 
     asyncio.create_task(run_web_server())
 
+
 def check_rate_limit(user_id: int) -> bool:
     """检查用户是否超出限流，返回 True 表示允许通过"""
     now = time.time()
@@ -1866,12 +2234,14 @@ def check_rate_limit(user_id: int) -> bool:
     user_rate_limit[user_id] = now
     return True
 
+
 # ====================== 订单管理组件（Discord UI + 持久化）======================
 class OrderControlView(discord.ui.View):
     """
     订单控制面板 — 带按钮的可视化订单卡片
     按钮永久有效（timeout=None），管理员可随时更新订单状态
     """
+
     def __init__(self, order_id: str):
         super().__init__(timeout=None)
         self.order_id = order_id
@@ -1890,7 +2260,8 @@ class OrderControlView(discord.ui.View):
             if field.name == "Status":
                 embed.set_field_at(0, name="Status", value="🔵 In Progress", inline=True)
                 break
-        await interaction.response.edit_message(content=f"🔄 Order `{self.order_id}` marked as **In Progress**", embed=embed)
+        await interaction.response.edit_message(content=f"🔄 Order `{self.order_id}` marked as **In Progress**",
+                                                embed=embed)
         logger.info(f"📦 Order {self.order_id} status → in_progress (by {interaction.user.name})")
 
     @discord.ui.button(label="✅ Mark Completed", style=discord.ButtonStyle.green, custom_id="order_complete")
@@ -1906,7 +2277,8 @@ class OrderControlView(discord.ui.View):
             if field.name == "Status":
                 embed.set_field_at(0, name="Status", value="✅ Completed", inline=True)
                 break
-        await interaction.response.edit_message(content=f"✅ Order `{self.order_id}` marked as **Completed**", embed=embed)
+        await interaction.response.edit_message(content=f"✅ Order `{self.order_id}` marked as **Completed**",
+                                                embed=embed)
         logger.info(f"📦 Order {self.order_id} status → completed (by {interaction.user.name})")
 
     @discord.ui.button(label="❌ Cancel Order", style=discord.ButtonStyle.red, custom_id="order_cancel")
@@ -1922,17 +2294,18 @@ class OrderControlView(discord.ui.View):
             if field.name == "Status":
                 embed.set_field_at(0, name="Status", value="❌ Cancelled", inline=True)
                 break
-        await interaction.response.edit_message(content=f"❌ Order `{self.order_id}` has been **Cancelled**", embed=embed)
+        await interaction.response.edit_message(content=f"❌ Order `{self.order_id}` has been **Cancelled**",
+                                                embed=embed)
         logger.info(f"📦 Order {self.order_id} status → cancelled (by {interaction.user.name})")
 
 
 async def create_order_from_confirmation(
-    guild: discord.Guild,
-    customer_id: int,
-    amount: float,
-    service_desc: str,
-    admin: discord.Member,
-    consulting_channel: discord.TextChannel
+        guild: discord.Guild,
+        customer_id: int,
+        amount: float,
+        service_desc: str,
+        admin: discord.Member,
+        consulting_channel: discord.TextChannel
 ) -> Optional[Tuple[str, discord.TextChannel, discord.Member]]:
     """
     从支付确认创建订单的统一函数
@@ -2036,7 +2409,7 @@ async def create_order_from_confirmation(
 
         # ========== 7. 迁移咨询频道历史 ==========
         try:
-            await migrate_history(consulting_channel, fulfillment_channel, limit=20)
+            await migrate_history(consulting_channel, fulfillment_channel, limit=200)
         except Exception as e:
             logger.warning(f"⚠️ Failed to migrate history: {e}")
 
@@ -2095,6 +2468,7 @@ class PaymentConfirmView(discord.ui.View):
 
     客户 ID 在按钮点击时从频道最近历史中自动识别（最近一条非 bot 消息的作者）
     """
+
     def __init__(self, service_desc: str, amount: float):
         super().__init__(timeout=7200)  # 2小时超时
         self.service_desc = service_desc
@@ -2126,7 +2500,8 @@ class PaymentConfirmView(discord.ui.View):
         # 回退：如果频道中只有管理员消息，使用第一个非 bot 用户（管理员可能在测试）
         return fallback_member
 
-    @discord.ui.button(label="✅ Confirm Payment & Create Order", style=discord.ButtonStyle.green, custom_id="payment_received")
+    @discord.ui.button(label="✅ Confirm Payment & Create Order", style=discord.ButtonStyle.green,
+                       custom_id="payment_received")
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not interaction.user.guild_permissions.administrator:
             await interaction.response.send_message("❌ Only admins can confirm payments.", ephemeral=True)
@@ -2145,7 +2520,9 @@ class PaymentConfirmView(discord.ui.View):
             # 从频道历史中自动识别客户
             customer = await self._get_customer_from_channel(consulting_channel)
             if not customer:
-                await interaction.followup.send("❌ Could not identify the customer from recent messages. Please use `!confirm-payment @user <amount> \"service\"` instead.", ephemeral=True)
+                await interaction.followup.send(
+                    "❌ Could not identify the customer from recent messages. Please use `!confirm-payment @user <amount> \"service\"` instead.",
+                    ephemeral=True)
                 return
 
             result = await create_order_from_confirmation(
@@ -2270,6 +2647,7 @@ class OrderDetailsModal(discord.ui.Modal, title='Order Details'):
 
 class CustomerSelectView(discord.ui.View):
     """客户选择菜单"""
+
     def __init__(self, channel: discord.TextChannel, guild: discord.Guild):
         super().__init__(timeout=30)
         self.channel = channel
@@ -2364,6 +2742,7 @@ class CreateOrderView(discord.ui.View):
     - 点击时弹出客户选择菜单（Select），然后弹 Modal 填服务和金额
     - 不禁用按钮，管理员可反复使用（如追加订单）
     """
+
     def __init__(self):
         super().__init__(timeout=None)
 
@@ -2424,7 +2803,6 @@ class CreateOrderView(discord.ui.View):
             view=view,
             ephemeral=True
         )
-
 
 
 def _extract_order_info_from_reply(reply: str) -> Optional[Dict]:
@@ -2613,14 +2991,29 @@ def parse_order_from_history(history: List[Dict]) -> Tuple[Optional[str], Option
     return service_desc, amount
 
 
-async def migrate_history(source: discord.TextChannel, target: discord.TextChannel, limit: int = 100):
+async def migrate_history(source: discord.TextChannel, target: discord.TextChannel, limit: int = 200):
     """
     将咨询频道的所有最近消息迁移到履约频道，方便打手了解完整上下文
-    包含所有消息（Bot、管理员、客户）
+    包含有意义的消息（Bot 回复、管理员、客户），过滤无意义的自动回复
     """
+    # 无意义的 bot 消息关键词（模板化回复，不含有效信息）
+    _noise_keywords = [
+        "【Help Guide】", "!order - Create new order", "!status",
+        "!pay", "!services", "!pricing", "!faq", "!support",
+        "Available services:", "Player Upgrade", "Badge Unlock",
+        "VC Boosting", "PC Mod", "Console Mod",
+    ]
+
+    def _is_noise(content: str) -> bool:
+        """判断是否是无意义的 bot 自动回复"""
+        if not content:
+            return True
+        return any(kw in content for kw in _noise_keywords)
+
     messages = []
     async for msg in source.history(limit=limit):
-        if msg.author.bot:
+        # 过滤无意义的 bot 消息，但保留有实质内容的 bot 回复
+        if msg.author.bot and _is_noise(msg.content):
             continue
         messages.append(msg)
 
@@ -2636,9 +3029,13 @@ async def migrate_history(source: discord.TextChannel, target: discord.TextChann
         if len(content) > 300:
             content = content[:300] + "..."
         author_name = msg.author.display_name
-        # 标记管理员消息
-        is_admin = msg.author.id in ADMIN_USER_IDS
-        prefix = "👤 Admin" if is_admin else f"💬 {author_name}"
+        # 标记消息类型
+        if msg.author.bot:
+            prefix = "🤖 Bot"
+        elif msg.author.id in ADMIN_USER_IDS:
+            prefix = "👤 Admin"
+        else:
+            prefix = f"💬 {author_name}"
         try:
             await target.send(f"**{prefix}** ({timestamp}): {content}")
         except Exception as e:
@@ -2655,10 +3052,11 @@ def create_bot() -> commands.Bot:
     intents.guilds = True
     intents.members = True  # 必需：获取成员列表
 
-    # 配置代理（支持中国网络）
+    # 配置代理（支持中国网络，Discord.py 通过 connector 使用代理）
     connector = None
     if HTTP_PROXY:
         try:
+            from aiohttp_socks import ProxyConnector
             connector = ProxyConnector.from_url(HTTP_PROXY)
             logger.info(f"🌐 Proxy configured: {HTTP_PROXY}")
         except Exception as e:
@@ -2691,7 +3089,8 @@ def create_bot() -> commands.Bot:
                 try:
                     overwrites = {
                         guild.default_role: discord.PermissionOverwrite(view_channel=False, send_messages=False),
-                        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True, manage_messages=True)
+                        guild.me: discord.PermissionOverwrite(view_channel=True, send_messages=True,
+                                                              manage_messages=True)
                     }
                     # 给管理员角色发消息权限
                     for role in guild.roles:
@@ -2740,7 +3139,8 @@ def create_bot() -> commands.Bot:
         msg_content = message.content.strip()
 
         # 调试：记录所有消息的用户 ID
-        logger.debug(f"🔍 DEBUG: User='{author_name}' ID={message.author.id} | ADMIN_USER_IDS={ADMIN_USER_IDS} | is_admin={is_admin}")
+        logger.debug(
+            f"🔍 DEBUG: User='{author_name}' ID={message.author.id} | ADMIN_USER_IDS={ADMIN_USER_IDS} | is_admin={is_admin}")
 
         # ========== 识图处理（如果消息包含图片）==========
         recognized_info = None
@@ -2846,7 +3246,8 @@ def create_bot() -> commands.Bot:
         author_name = message.author.name
         channel_name = channel.name
 
-        logger.info(f"🔄 [handle_message START] MsgID: {message.id} | User: {message.author.name} | Channel: {channel.name} | Content: '{user_msg[:50]}'")
+        logger.info(
+            f"🔄 [handle_message START] MsgID: {message.id} | User: {message.author.name} | Channel: {channel.name} | Content: '{user_msg[:50]}'")
 
         # ========== 第一步：立即响应 ==========
         # 防止 Discord "Interaction failed" 超时
@@ -2882,11 +3283,13 @@ def create_bot() -> commands.Bot:
             # 使用词边界匹配避免 "pass" 误匹配 "password"
             has_purchase_intent = (
                     has_explicit_order_request or
-                    (has_order_intent and any(re.search(r'\b' + re.escape(kw) + r'\b', user_msg_lower) for kw in ["rep", "99", "pass", "mt", "vc", "service", "boost"]))
+                    (has_order_intent and any(re.search(r'\b' + re.escape(kw) + r'\b', user_msg_lower) for kw in
+                                              ["rep", "99", "pass", "mt", "vc", "service", "boost"]))
             )
 
             if has_purchase_intent:
-                logger.info(f"📦 Purchase intent detected: explicit={has_explicit_order_request}, ai_intent={has_order_intent}")
+                logger.info(
+                    f"📦 Purchase intent detected: explicit={has_explicit_order_request}, ai_intent={has_order_intent}")
 
                 # 添加订单信息到 AI 回复
                 order_notice = "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n💳 **To proceed with your order:**\n1. Review the price above\n2. 🔗 Check our G2G store: https://www.g2g.com/cn/categories/nba-dunk-items?seller=LegendNBA2k\n3. Choose payment method (Crypto/PayPal/Bank)\n4. Contact admin to confirm payment\n5. Admin will create your order channel\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -2932,7 +3335,7 @@ def create_bot() -> commands.Bot:
                 for i, chunk in enumerate(chunks[1:-1], 1):
                     await asyncio.sleep(0.3)
                     await channel.send(chunk)
-                    logger.info(f"📤 Sent chunk {i+1}/{len(chunks)}")
+                    logger.info(f"📤 Sent chunk {i + 1}/{len(chunks)}")
 
                 # 最后一条消息（如果有 view 则附加）
                 last_chunk = chunks[-1] if len(chunks) > 1 else None
@@ -2949,14 +3352,16 @@ def create_bot() -> commands.Bot:
             else:
                 await status_msg.edit(content=ai_reply)
 
-            logger.info(f"✅ [handle_message END] Reply sent successfully (total chars: {len(ai_reply)}) | MsgID: {message.id}")
+            logger.info(
+                f"✅ [handle_message END] Reply sent successfully (total chars: {len(ai_reply)}) | MsgID: {message.id}")
 
         except Exception as e:
             logger.error(f"❌ Error handling message: {e}", exc_info=True)
             await status_msg.edit(content="⚠️ Sorry, something went wrong. Please try again or contact support.")
 
     # ====================== 订单频道创建 ======================
-    async def create_order_channel(guild: discord.Guild, user: discord.User, service_desc: str) -> Optional[discord.TextChannel]:
+    async def create_order_channel(guild: discord.Guild, user: discord.User, service_desc: str) -> Optional[
+        discord.TextChannel]:
         """创建订单频道"""
         try:
             # 生成订单编号
@@ -3019,7 +3424,9 @@ def create_bot() -> commands.Bot:
             color=discord.Color.blue()
         )
         embed.add_field(name="Max Concurrent", value=f"{MAX_CONCURRENT_TASKS} tasks", inline=True)
-        embed.add_field(name="AI Engines", value=f"OpenAI={ai_service._openai_enabled}, DeepSeek={ai_service._deepseek_enabled}", inline=True)
+        embed.add_field(name="AI Engines",
+                        value=f"OpenAI={ai_service._openai_enabled}, DeepSeek={ai_service._deepseek_enabled}",
+                        inline=True)
         embed.add_field(name="Context Storage", value="SQLite + LRU Memory", inline=True)
         embed.add_field(name="Rate Limit", value=f"{USER_RATE_LIMIT_SECONDS}s per user", inline=True)
         await ctx.send(embed=embed)
@@ -3129,7 +3536,9 @@ def create_bot() -> commands.Bot:
             await msg.pin()
             await ctx.send("✅ Panel pinned to the top of this channel!", delete_after=5)
         except discord.Forbidden:
-            await ctx.send("⚠️ I don't have permission to pin. Please **right-click** the panel message → **Pin Message**.", delete_after=10)
+            await ctx.send(
+                "⚠️ I don't have permission to pin. Please **right-click** the panel message → **Pin Message**.",
+                delete_after=10)
         except Exception as e:
             logger.warning(f"⚠️ Failed to pin panel message: {e}")
 
@@ -3184,7 +3593,8 @@ def create_bot() -> commands.Bot:
             return
 
         try:
-            logger.info(f"💳 {ctx.author.name} confirmed payment for {user.name} | Amount: ${amount} | Project: {project}")
+            logger.info(
+                f"💳 {ctx.author.name} confirmed payment for {user.name} | Amount: ${amount} | Project: {project}")
 
             # 在咨询频道发送确认消息
             embed = discord.Embed(
@@ -3220,7 +3630,8 @@ def create_bot() -> commands.Bot:
                 await ctx.send(f"❌ Failed to create order for {user.name}")
 
         except discord.ext.commands.errors.UserNotFound:
-            await ctx.send(f"❌ User not found! Make sure you use a real @mention (not `@user`). Example: `!confirm-payment @username {amount} \"{project or 'service'}\"`")
+            await ctx.send(
+                f"❌ User not found! Make sure you use a real @mention (not `@user`). Example: `!confirm-payment @username {amount} \"{project or 'service'}\"`")
         except Exception as e:
             logger.error(f"❌ Error confirming payment: {e}", exc_info=True)
             await ctx.send(f"❌ Error: {str(e)[:100]}")
@@ -3229,9 +3640,11 @@ def create_bot() -> commands.Bot:
     async def confirm_payment_error(ctx, error):
         """处理 confirm-payment 命令的错误"""
         if isinstance(error, discord.ext.commands.errors.UserNotFound):
-            await ctx.send('❌ User not found! Please use a real @mention (click the username to mention them).\nExample: `!confirm-payment @username 15 "50x Rep Sleeve"`')
+            await ctx.send(
+                '❌ User not found! Please use a real @mention (click the username to mention them).\nExample: `!confirm-payment @username 15 "50x Rep Sleeve"`')
         elif isinstance(error, discord.ext.commands.errors.MissingRequiredArgument):
-            await ctx.send('❌ Missing arguments! Usage: `!confirm-payment @user <amount> "service description"`\nExample: `!confirm-payment @Legend2k26 15 "50x Rep Sleeve"`')
+            await ctx.send(
+                '❌ Missing arguments! Usage: `!confirm-payment @user <amount> "service description"`\nExample: `!confirm-payment @Legend2k26 15 "50x Rep Sleeve"`')
         elif isinstance(error, discord.ext.commands.errors.CheckFailure):
             await ctx.send("❌ This command is only for administrators!")
         else:
@@ -3278,6 +3691,7 @@ def create_bot() -> commands.Bot:
 
     return bot
 
+
 # ====================== 启动入口 ======================
 async def main():
     """Bot 启动入口"""
@@ -3312,10 +3726,10 @@ async def main():
         logger.error(f"❌ Bot startup failed: {e}", exc_info=True)
         await bot.close()
 
+
 if __name__ == "__main__":
     # 检查必要的依赖
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("👋 Goodbye!")
-
