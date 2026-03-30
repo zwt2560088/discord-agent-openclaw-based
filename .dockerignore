@@ -1,0 +1,46 @@
+# 敏感配置（不要打进镜像）
+.env
+.env.*
+*.local
+
+# 数据库/向量库（本地数据不进容器）
+knowledge_db/
+*.db
+*.sqlite3
+*.bin
+
+# 缓存/编译文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.coverage/
+
+# 日志文件
+logs/
+*.log
+
+# Git 相关
+.git/
+.gitignore
+.github/
+
+# IDE 配置
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS 文件
+.DS_Store
+Thumbs.db
+
+# 项目特定
+node_modules/
+venv/
+*.zip
+*.tar.gz
+

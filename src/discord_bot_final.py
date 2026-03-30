@@ -12,12 +12,14 @@
 import aiohttp
 import asyncio
 import discord
+import glob
 import json
 import logging
 import os
 import re
 import sys
 import time
+from aiohttp import web
 from aiohttp_socks import ProxyConnector
 from collections import OrderedDict
 from datetime import datetime
@@ -62,6 +64,15 @@ except ImportError:
 # 添加 src/legacy 目录到 Python 路径以导入 RAG Agent
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "legacy"))
 
+# 导入识图工具
+try:
+    from image_recognizer import init_image_recognizer
+    IMAGE_RECOGNIZER_AVAILABLE = True
+except ImportError:
+    IMAGE_RECOGNIZER_AVAILABLE = False
+    logger_setup = logging.getLogger("DiscordBot")
+    logger_setup.warning("⚠️ Image recognizer not available. Install with: pip install pillow pytesseract")
+
 # ====================== 日志配置（生产级）======================
 logging.basicConfig(
     level=logging.INFO,
@@ -83,10 +94,19 @@ HTTP_PROXY = os.getenv("HTTP_PROXY")
 # 这些人的消息会被记录到上下文（作为补充信息），但不会触发 AI 回复
 _ADMIN_IDS_RAW = os.getenv("admin_user_ids", "")
 ADMIN_USER_IDS = set()
-for _aid in _ADMIN_IDS_RAW.split(","):
-    _aid = _aid.strip()
-    if _aid.isdigit():
-        ADMIN_USER_IDS.add(int(_aid))
+if _ADMIN_IDS_RAW:
+    for _aid in _ADMIN_IDS_RAW.split(","):
+        _aid = _aid.strip()
+        if _aid.isdigit():
+            ADMIN_USER_IDS.add(int(_aid))
+    logger.info(f"✅ Loaded ADMIN_USER_IDS: {ADMIN_USER_IDS}")
+else:
+    logger.warning(f"⚠️  admin_user_ids not configured in .env")
+
+# ====================== Web 管理界面配置 ======================
+KNOWLEDGE_DIR = "./knowledge"                           # 知识库目录
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")        # Web 管理密码
+WEB_PORT = 8081                                         # Web 管理端口
 
 # 高并发参数
 MAX_CONCURRENT_TASKS = 20
@@ -922,26 +942,8 @@ class AIService:
                 )
                 logger.info("🔧 ReAct Agent using OpenAI")
 
-            # 收集所有工具（从全局作用域动态获取）
-            # 优先级：get_price 和 confirm_payment 是必需的，其他是可选的
-            required_tools = ['get_price', 'confirm_payment']
-            optional_tools = ['query_knowledge', 'check_order_status', 'send_payment_confirmation']
-            tools = []
-
-            for tool_name in required_tools:
-                if tool_name in globals():
-                    tools.append(globals()[tool_name])
-                else:
-                    logger.error(f"❌ Required tool {tool_name} not found!")
-
-            for tool_name in optional_tools:
-                if tool_name in globals():
-                    tools.append(globals()[tool_name])
-                else:
-                    logger.warning(f"⚠️ Optional tool {tool_name} not found in globals")
-
-            if not tools or len(tools) < 2:
-                raise ValueError("Not enough tools found! At least get_price and confirm_payment are required.")
+            # 收集所有工具
+            tools = [get_price, confirm_payment, query_knowledge, check_order_status, send_payment_confirmation]
 
             # 创建 ReAct prompt
             react_prompt = PromptTemplate.from_template("""You are an intelligent NBA 2K26 customer service assistant with COMPLETE MEMORY of every user's past interactions.
@@ -1107,8 +1109,8 @@ Final Answer: the final answer to the original input question
 
 {chat_history}
 
-Question: {input}
-Thought:{agent_scratchpad}""")
+Question: {{input}}
+Thought:{{agent_scratchpad}}""")
 
             # 创建 ReAct Agent
             self._react_agent = create_react_agent(llm, tools, react_prompt)
@@ -1581,6 +1583,280 @@ concurrency_semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
 # 用户限流缓存：(user_id -> last_request_time)
 user_rate_limit: Dict[int, float] = {}
 
+# ====================== 知识库 Web 管理界面 ======================
+
+def verify_auth(request):
+    """验证请求认证（可选密码）"""
+    if not ADMIN_PASSWORD:
+        return True
+    auth = request.headers.get("Authorization", "")
+    return auth == f"Bearer {ADMIN_PASSWORD}"
+
+async def admin_page(request):
+    """管理界面 HTML"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+
+    html = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Knowledge Base Manager</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+            .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden; display: flex; height: 90vh; }
+            .sidebar { width: 280px; background: #f8f9fa; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; }
+            .header { padding: 20px; background: #667eea; color: white; font-size: 18px; font-weight: bold; }
+            .file-list { flex: 1; overflow-y: auto; padding: 10px; }
+            .file-item { padding: 10px; margin-bottom: 5px; cursor: pointer; border-radius: 6px; transition: all 0.2s; }
+            .file-item:hover { background: #e0e7ff; }
+            .file-item.active { background: #667eea; color: white; font-weight: bold; }
+            .main { flex: 1; display: flex; flex-direction: column; }
+            .toolbar { padding: 15px 20px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0; display: flex; gap: 10px; align-items: center; }
+            .toolbar button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; transition: all 0.2s; }
+            .toolbar button.primary { background: #667eea; color: white; }
+            .toolbar button.primary:hover { background: #5568d3; }
+            .toolbar button.success { background: #28a745; color: white; }
+            .toolbar button.success:hover { background: #218838; }
+            .toolbar button.danger { background: #dc3545; color: white; }
+            .toolbar button.danger:hover { background: #c82333; }
+            .editor { flex: 1; display: flex; flex-direction: column; padding: 20px; }
+            .editor-header { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+            .editor-header h3 { color: #333; }
+            .editor-header .filename { color: #666; font-size: 14px; }
+            textarea { flex: 1; font-family: "Monaco", "Courier New", monospace; font-size: 13px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; resize: none; }
+            .status { position: fixed; bottom: 20px; right: 20px; padding: 15px 20px; border-radius: 6px; display: none; max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: slideIn 0.3s ease; }
+            .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+            .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+            .status.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+            @keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #f3f3f3; border-top: 2px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 8px; }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            .empty-state { display: flex; align-items: center; justify-content: center; height: 100%; color: #999; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="sidebar">
+                <div class="header">📚 Files</div>
+                <div class="file-list" id="fileList"></div>
+            </div>
+            <div class="main">
+                <div class="toolbar">
+                    <button class="primary" id="rebuildBtn">🔄 Rebuild Vector Store</button>
+                    <button class="success" id="saveBtn">💾 Save File</button>
+                    <span id="statusIcon" style="display: none;"><span class="spinner"></span><span id="statusText"></span></span>
+                </div>
+                <div class="editor">
+                    <div class="editor-header">
+                        <h3>Edit Content</h3>
+                        <span class="filename" id="filenameDisplay">Select a file to edit...</span>
+                    </div>
+                    <textarea id="editor" placeholder="Select a file from the left to start editing..."></textarea>
+                </div>
+            </div>
+        </div>
+        <div id="statusMsg" class="status"></div>
+        <script>
+            let currentFile = null;
+            const password = prompt("Enter admin password:", "");
+            const headers = password ? { 'Authorization': `Bearer ${password}` } : {};
+
+            async function fetchJSON(url, options = {}) {
+                const res = await fetch(url, { ...options, headers });
+                if (res.status === 401) {
+                    alert("❌ Unauthorized. Wrong password?");
+                    return null;
+                }
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(`${res.status}: ${text}`);
+                }
+                return await res.json();
+            }
+
+            async function loadFileList() {
+                try {
+                    const data = await fetchJSON('/admin/files');
+                    if (data) {
+                        const listDiv = document.getElementById('fileList');
+                        listDiv.innerHTML = '';
+                        if (data.length === 0) {
+                            listDiv.innerHTML = '<div style="padding: 10px; color: #999;">No files found</div>';
+                            return;
+                        }
+                        data.forEach(file => {
+                            const div = document.createElement('div');
+                            div.className = 'file-item';
+                            div.textContent = file;
+                            div.onclick = () => loadFile(file);
+                            listDiv.appendChild(div);
+                        });
+                    }
+                } catch (e) {
+                    showStatus(`❌ Failed to load files: ${e.message}`, 'error');
+                }
+            }
+
+            async function loadFile(filename) {
+                try {
+                    const data = await fetchJSON(`/admin/file/${encodeURIComponent(filename)}`);
+                    if (data) {
+                        currentFile = filename;
+                        document.getElementById('editor').value = data.content;
+                        document.getElementById('filenameDisplay').textContent = filename;
+                        document.querySelectorAll('.file-item').forEach(el => {
+                            el.classList.toggle('active', el.textContent === filename);
+                        });
+                    }
+                } catch (e) {
+                    showStatus(`❌ Failed to load file: ${e.message}`, 'error');
+                }
+            }
+
+            async function saveFile() {
+                if (!currentFile) {
+                    showStatus("No file selected", "error");
+                    return;
+                }
+                const content = document.getElementById('editor').value;
+                showStatus("Saving...", "info");
+                try {
+                    const res = await fetch('/admin/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...headers },
+                        body: JSON.stringify({ filename: currentFile, content })
+                    });
+                    if (res.ok) {
+                        showStatus("✅ File saved successfully!", "success");
+                    } else {
+                        const text = await res.text();
+                        showStatus(`❌ Save failed: ${text}`, "error");
+                    }
+                } catch (e) {
+                    showStatus(`❌ Save error: ${e.message}`, "error");
+                }
+            }
+
+            async function rebuild() {
+                if (!confirm("⚠️  Rebuilding may take a while (typically 10-30s). Continue?")) return;
+                showStatus("Rebuilding vector store...", "info");
+                try {
+                    const res = await fetch('/admin/rebuild', { method: 'POST', headers });
+                    if (res.ok) {
+                        showStatus("✅ Rebuild triggered! Vector store will update in background. New knowledge takes effect immediately!", "success");
+                    } else {
+                        showStatus("❌ Rebuild failed", "error");
+                    }
+                } catch (e) {
+                    showStatus(`❌ Error: ${e.message}`, "error");
+                }
+            }
+
+            function showStatus(msg, type) {
+                const statusDiv = document.getElementById('statusMsg');
+                statusDiv.textContent = msg;
+                statusDiv.className = `status ${type}`;
+                statusDiv.style.display = 'block';
+                if (type === "success" || type === "error") {
+                    setTimeout(() => { statusDiv.style.display = 'none'; }, 4000);
+                }
+            }
+
+            document.getElementById('saveBtn').onclick = saveFile;
+            document.getElementById('rebuildBtn').onclick = rebuild;
+            loadFileList();
+        </script>
+    </body>
+    </html>
+    '''
+    return web.Response(text=html, content_type='text/html')
+
+async def list_files(request):
+    """列出所有知识库文件"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    files = []
+    for ext in ["md", "txt"]:
+        for path in glob.glob(os.path.join(KNOWLEDGE_DIR, f"*.{ext}")):
+            files.append(os.path.basename(path))
+    return web.json_response(sorted(files))
+
+async def get_file(request):
+    """获取文件内容"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    filename = request.match_info.get("filename", "")
+    if not filename or ".." in filename or "/" in filename:
+        return web.Response(status=400, text="Invalid filename")
+    filepath = os.path.join(KNOWLEDGE_DIR, filename)
+    if not os.path.exists(filepath):
+        return web.Response(status=404, text="File not found")
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+        return web.json_response({"filename": filename, "content": content})
+    except Exception as e:
+        return web.Response(status=500, text=str(e))
+
+async def save_file(request):
+    """保存文件内容"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    try:
+        data = await request.json()
+        filename = data.get("filename", "")
+        content = data.get("content", "")
+        if not filename or ".." in filename or "/" in filename:
+            return web.Response(status=400, text="Invalid filename")
+        filepath = os.path.join(KNOWLEDGE_DIR, filename)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+        logger.info(f"✅ Web save: {filename} updated")
+        return web.json_response({"status": "ok", "message": "File saved"})
+    except Exception as e:
+        logger.error(f"❌ Web save failed: {e}")
+        return web.Response(status=500, text=str(e))
+
+async def rebuild_vectorstore(request):
+    """触发向量库重建（后台任务）"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    asyncio.create_task(_rebuild_background())
+    return web.json_response({"status": "rebuilding", "message": "Vector store rebuild started in background."})
+
+async def _rebuild_background():
+    """后台重建向量库"""
+    try:
+        logger.info("🔄 Web rebuild: starting vector store rebuild...")
+        if ai_service and ai_service._rag_agent:
+            await ai_service._rag_agent.rebuild_knowledge_base()
+            logger.info("✅ Web rebuild: vector store rebuilt successfully")
+        else:
+            logger.error("❌ Web rebuild: RAG agent not available")
+    except Exception as e:
+        logger.error(f"❌ Web rebuild failed: {e}", exc_info=True)
+
+def start_web_server():
+    """启动后台 Web 服务器"""
+    app = web.Application()
+    app.router.add_get('/admin', admin_page)
+    app.router.add_get('/admin/files', list_files)
+    app.router.add_get('/admin/file/{filename}', get_file)
+    app.router.add_post('/admin/save', save_file)
+    app.router.add_post('/admin/rebuild', rebuild_vectorstore)
+
+    async def run_web_server():
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', WEB_PORT)
+        await site.start()
+        logger.info(f"🌐 Knowledge base admin UI started at http://0.0.0.0:{WEB_PORT}/admin")
+
+    asyncio.create_task(run_web_server())
+
 def check_rate_limit(user_id: int) -> bool:
     """检查用户是否超出限流，返回 True 表示允许通过"""
     now = time.time()
@@ -1691,8 +1967,20 @@ async def create_order_from_confirmation(
             except Exception as e:
                 logger.warning(f"⚠️ Failed to save order: {e}")
 
-        # ========== 4. 创建履约频道 ==========
-        fulfillment_channel_name = f"fulfillment-{order_id.lower()}"
+        # ========== 4. 创建或获取 Orders 分类 ==========
+        orders_category = discord.utils.get(guild.categories, name="Orders")
+        if not orders_category:
+            # 创建 Orders 分类
+            orders_category = await guild.create_category("Orders")
+            logger.info(f"✅ Created 'Orders' category")
+
+        # ========== 5. 创建履约频道 ==========
+        # 频道命名格式：nba2k-{customer}-{date}-{id}
+        date_str = datetime.now().strftime('%Y%m%d')
+        order_num = order_id.split('-')[-1] if '-' in order_id else order_id
+        customer_name = customer.name.lower().replace(' ', '-')[:20]  # 限制长度避免超过 Discord 限制
+        fulfillment_channel_name = f"nba2k-{customer_name}-{date_str}-{order_num}"
+
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             customer: discord.PermissionOverwrite(
@@ -1714,6 +2002,7 @@ async def create_order_from_confirmation(
 
         fulfillment_channel = await guild.create_text_channel(
             name=fulfillment_channel_name,
+            category=orders_category,
             overwrites=overwrites,
             topic=f"Order: {order_id} | User: {customer.name} | Amount: ${amount} | Status: In Progress"
         )
@@ -1753,7 +2042,7 @@ async def create_order_from_confirmation(
 
         # ========== 8. 在履约频道通知客户 ==========
         await fulfillment_channel.send(
-            f"🚀 {customer.mention} 您的服务已确认！打手将在 10 分钟内开始。"
+            f"🚀 {customer.mention} Your service has been confirmed! Boost will start within 10 minutes."
         )
 
         # ========== 9. 订单看板同步 ==========
@@ -1766,7 +2055,6 @@ async def create_order_from_confirmation(
                     color=discord.Color.gold()
                 )
                 board_embed.add_field(name="Customer", value=customer.mention, inline=True)
-                board_embed.add_field(name="Amount", value=f"${amount:.2f}", inline=True)
                 board_embed.add_field(name="Status", value="🟡 Pending", inline=True)
                 board_embed.add_field(name="Confirmed By", value=admin.mention, inline=True)
                 board_embed.add_field(name="Fulfillment", value=fulfillment_channel.mention, inline=True)
@@ -1870,14 +2158,8 @@ class PaymentConfirmView(discord.ui.View):
             )
             if result:
                 order_id, fulfillment_channel, _ = result
-                await interaction.followup.send(
-                    f"✅ **Order created!**\n"
-                    f"📋 Order ID: `{order_id}`\n"
-                    f"💰 Amount: ${self.amount:.2f}\n"
-                    f"🎮 Service: {self.service_desc}\n"
-                    f"📢 Fulfillment: {fulfillment_channel.mention}\n"
-                    f"📌 {customer.mention} — Please proceed to the fulfillment channel"
-                )
+                # 不重复发送，create_order_from_confirmation 已发送过
+                logger.info(f"✅ Order {order_id} created successfully via PaymentConfirmView")
             else:
                 await interaction.followup.send("❌ Failed to create order. Check logs.", ephemeral=True)
         except Exception as e:
@@ -1977,14 +2259,8 @@ class OrderDetailsModal(discord.ui.Modal, title='Order Details'):
             )
             if result:
                 order_id, fulfillment_channel, _ = result
-                await interaction.followup.send(
-                    f"✅ **Order created!**\n"
-                    f"📋 Order ID: `{order_id}`\n"
-                    f"💰 Amount: ${amount:.2f}\n"
-                    f"🎮 Service: {service_desc}\n"
-                    f"📢 Fulfillment: {fulfillment_channel.mention}\n"
-                    f"📌 {self.customer.mention} — Please proceed to the fulfillment channel"
-                )
+                # 不重复发送，create_order_from_confirmation 已发送过
+                logger.info(f"✅ Order {order_id} created successfully via OrderDetailsModal")
             else:
                 await interaction.followup.send("❌ Failed to create order. Check logs.", ephemeral=True)
         except Exception as e:
@@ -2100,9 +2376,12 @@ class CreateOrderView(discord.ui.View):
         guild = interaction.guild
         channel = interaction.channel
 
-        # 获取所有非 bot 成员
+        # 获取对当前频道有权限的非 bot 成员
         try:
-            all_members = [m for m in guild.members if not m.bot]
+            all_members = [
+                m for m in guild.members
+                if not m.bot and channel.permissions_for(m).read_messages
+            ]
         except Exception as e:
             logger.error(f"❌ Failed to fetch guild members: {e}")
             await interaction.response.send_message(
@@ -2113,7 +2392,7 @@ class CreateOrderView(discord.ui.View):
 
         if not all_members:
             await interaction.response.send_message(
-                "❌ No members found in guild (excluding bots).",
+                "❌ No members found with access to this channel (excluding bots).",
                 ephemeral=True
             )
             return
@@ -2334,10 +2613,10 @@ def parse_order_from_history(history: List[Dict]) -> Tuple[Optional[str], Option
     return service_desc, amount
 
 
-async def migrate_history(source: discord.TextChannel, target: discord.TextChannel, limit: int = 20):
+async def migrate_history(source: discord.TextChannel, target: discord.TextChannel, limit: int = 100):
     """
-    将咨询频道的最近消息迁移到履约频道，方便打手了解上下文
-    只迁移非 bot 的消息，从旧到新排列
+    将咨询频道的所有最近消息迁移到履约频道，方便打手了解完整上下文
+    包含所有消息（Bot、管理员、客户）
     """
     messages = []
     async for msg in source.history(limit=limit):
@@ -2346,12 +2625,11 @@ async def migrate_history(source: discord.TextChannel, target: discord.TextChann
         messages.append(msg)
 
     if not messages:
-        await target.send("📜 No previous discussion found.")
         return
 
     # 倒序（从旧到新）
     messages.reverse()
-    header = await target.send("📋 **--- Previous Discussion ---**")
+    await target.send("📋 **--- Previous Discussion ---**")
     for msg in messages:
         timestamp = msg.created_at.strftime("%Y-%m-%d %H:%M")
         content = msg.content if msg.content else "[Attachment/Embed]"
@@ -2375,6 +2653,7 @@ def create_bot() -> commands.Bot:
     intents = discord.Intents.default()
     intents.message_content = True
     intents.guilds = True
+    intents.members = True  # 必需：获取成员列表
 
     # 配置代理（支持中国网络）
     connector = None
@@ -2459,6 +2738,29 @@ def create_bot() -> commands.Bot:
         channel_name = message.channel.name
         author_name = message.author.name
         msg_content = message.content.strip()
+
+        # 调试：记录所有消息的用户 ID
+        logger.debug(f"🔍 DEBUG: User='{author_name}' ID={message.author.id} | ADMIN_USER_IDS={ADMIN_USER_IDS} | is_admin={is_admin}")
+
+        # ========== 识图处理（如果消息包含图片）==========
+        recognized_info = None
+        if message.attachments and IMAGE_RECOGNIZER_AVAILABLE:
+            first_attachment = message.attachments[0]
+            if first_attachment.content_type and first_attachment.content_type.startswith("image/"):
+                status_msg = await message.channel.send("🔍 Processing your image...")
+                try:
+                    from image_recognizer import image_recognizer
+                    if image_recognizer:
+                        recognized_info = await image_recognizer.recognize(first_attachment.url)
+                        if recognized_info:
+                            logger.info(f"🖼️ Image recognized: {recognized_info}")
+                            # 拼接识别信息到消息
+                            msg_content += f" [IMAGE_INFO: {json.dumps(recognized_info)}]"
+                finally:
+                    try:
+                        await status_msg.delete()
+                    except:
+                        pass
 
         # ========== 全量用户记忆记录（不区分管理员/客户，所有消息都记录）==========
         # 记录发送者的消息到自己的记忆
@@ -2982,6 +3284,14 @@ async def main():
     if not DISCORD_TOKEN:
         logger.error("❌ DISCORD_TOKEN not configured!")
         return
+
+    # 初始化识图工具（如果可用）
+    if IMAGE_RECOGNIZER_AVAILABLE:
+        init_image_recognizer()
+
+    # 启动知识库管理 Web 服务
+    logger.info("🌐 Starting Knowledge Base Admin UI...")
+    start_web_server()
 
     logger.info("🚀 Starting Discord Bot (Final Optimized Version)...")
     bot = create_bot()
