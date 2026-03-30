@@ -77,6 +77,15 @@ except ImportError:
     logger_setup = logging.getLogger("DiscordBot")
     logger_setup.warning("⚠️ Image recognizer not available. Install with: pip install pillow pytesseract")
 
+# 导入监控模块
+try:
+    from monitoring.system_monitor import get_metrics_collector, MetricsCollector
+    METRICS_AVAILABLE = True
+except ImportError:
+    METRICS_AVAILABLE = False
+    logger_setup = logging.getLogger("DiscordBot")
+    logger_setup.warning("⚠️ System monitor not available.")
+
 # ====================== 日志配置（生产级）======================
 logging.basicConfig(
     level=logging.INFO,
@@ -1571,6 +1580,7 @@ Examples:
 
     async def _call_openai(self, messages: List[Dict]) -> Tuple[str, bool]:
         """调用 OpenAI API（异步）"""
+        start_time = time.time()
         try:
             async with aiohttp.ClientSession() as session:
                 url = "https://api.openai.com/v1/chat/completions"
@@ -1606,6 +1616,7 @@ Examples:
 
     async def _call_deepseek(self, messages: List[Dict]) -> Tuple[str, bool]:
         """调用 DeepSeek API（异步）"""
+        start_time = time.time()
         if not DEEPSEEK_API_KEY:
             logger.warning("⚠️ DeepSeek API key not configured")
             return "", False
@@ -1650,20 +1661,34 @@ Examples:
                         reply = reply.replace("[ORDER_INTENT]", "").strip()
 
                         logger.info(f"✅ DeepSeek reply ({len(reply)} chars): {reply[:50]}...")
+
+                        # 监控埋点：LLM 调用成功
+                        latency = time.time() - start_time
+                        if METRICS_AVAILABLE:
+                            get_metrics_collector().record_llm_call(latency)
+
                         return reply, has_intent
                     else:
                         body = await resp.text()
                         logger.error(f"❌ DeepSeek API error {resp.status}: {body[:200]}")
+                        if METRICS_AVAILABLE:
+                            get_metrics_collector().inc_error()
                         return "", False
 
         except asyncio.TimeoutError:
             logger.warning("⏱️ DeepSeek call timeout (>15s)")
+            if METRICS_AVAILABLE:
+                get_metrics_collector().inc_error()
             return "", False
         except aiohttp.ClientError as e:
             logger.error(f"❌ DeepSeek network error: {e}")
+            if METRICS_AVAILABLE:
+                get_metrics_collector().inc_error()
             return "", False
         except Exception as e:
             logger.error(f"❌ DeepSeek call failed: {e}", exc_info=True)
+            if METRICS_AVAILABLE:
+                get_metrics_collector().inc_error()
             return "", False
 
 
@@ -1705,6 +1730,10 @@ async def admin_page(request):
             .container { max-width: 1400px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden; display: flex; height: 90vh; }
             .sidebar { width: 280px; background: #f8f9fa; border-right: 1px solid #e0e0e0; display: flex; flex-direction: column; }
             .header { padding: 20px; background: #667eea; color: white; font-size: 18px; font-weight: bold; }
+            .nav-links { display: flex; gap: 10px; padding: 10px 15px; background: #5568d3; flex-wrap: wrap; }
+            .nav-links a { color: white; text-decoration: none; font-size: 12px; padding: 4px 8px; background: rgba(255,255,255,0.2); border-radius: 4px; }
+            .nav-links a:hover { background: rgba(255,255,255,0.3); }
+            .nav-links a.active { background: white; color: #667eea; }
             .file-list { flex: 1; overflow-y: auto; padding: 10px; }
             .file-item { padding: 10px; margin-bottom: 5px; cursor: pointer; border-radius: 6px; transition: all 0.2s; }
             .file-item:hover { background: #e0e7ff; }
@@ -1736,7 +1765,12 @@ async def admin_page(request):
     <body>
         <div class="container">
             <div class="sidebar">
-                <div class="header">📚 Files</div>
+                <div class="header">📚 Knowledge Base</div>
+                <div class="nav-links">
+                    <a href="/admin" class="active">知识库</a>
+                    <a href="/admin/history">对话历史</a>
+                    <a href="/admin/dashboard">监控面板</a>
+                </div>
                 <div class="file-list" id="fileList"></div>
             </div>
             <div class="main">
@@ -2035,6 +2069,189 @@ async def api_user_history(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
+# ====================== 监控相关路由 ======================
+
+async def metrics_endpoint(request):
+    """Prometheus 格式的指标端点"""
+    if METRICS_AVAILABLE:
+        collector = get_metrics_collector()
+        return web.Response(text=collector.to_prometheus(), content_type='text/plain')
+    else:
+        return web.Response(text="# Metrics not available", status=503, content_type='text/plain')
+
+
+async def api_metrics(request):
+    """返回最近 N 条指标数据（JSON 格式）"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    if not METRICS_AVAILABLE:
+        return web.json_response({"error": "Metrics not available"}, status=503)
+
+    try:
+        limit = int(request.query.get('limit', 100))
+        collector = get_metrics_collector()
+        data = collector.get_recent(limit)
+        return web.json_response(data)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def dashboard_page(request):
+    """监控仪表板 HTML"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+
+    html = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>系统监控仪表板</title>
+        <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+        <style>
+            * { box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #eee; margin: 0; padding: 20px; }
+            h1 { margin: 0 0 20px 0; font-size: 24px; }
+            .nav { margin-bottom: 20px; }
+            .nav a { color: #4cc9f0; text-decoration: none; margin-right: 20px; }
+            .nav a:hover { text-decoration: underline; }
+            .stats-row { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+            .stat-card { background: linear-gradient(135deg, #16213e 0%, #0f3460 100%); border-radius: 12px; padding: 20px; flex: 1; min-width: 180px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+            .stat-card h3 { margin: 0 0 10px 0; font-size: 14px; color: #888; }
+            .stat-card .value { font-size: 32px; font-weight: bold; color: #4cc9f0; }
+            .stat-card .unit { font-size: 14px; color: #666; margin-left: 5px; }
+            .charts-row { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+            .chart-container { background: #16213e; border-radius: 12px; padding: 20px; flex: 1; min-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+            .chart-container h3 { margin: 0 0 15px 0; font-size: 16px; color: #4cc9f0; }
+            .chart { height: 250px; width: 100%; }
+            .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+            .status-ok { color: #4ade80; }
+            .status-warn { color: #fbbf24; }
+            .status-error { color: #f87171; }
+        </style>
+    </head>
+    <body>
+        <div class="nav">
+            <a href="/admin">📚 知识库管理</a>
+            <a href="/admin/history">💬 对话历史</a>
+            <a href="/admin/dashboard">📊 监控仪表板</a>
+        </div>
+        <h1>📊 NBA 2K26 Bot 系统监控</h1>
+
+        <div class="stats-row" id="stats-row"></div>
+        <div class="charts-row">
+            <div class="chart-container"><h3>💻 CPU 使用率 (%)</h3><div id="cpu-chart" class="chart"></div></div>
+            <div class="chart-container"><h3>🧠 内存使用 (MB)</h3><div id="memory-chart" class="chart"></div></div>
+        </div>
+        <div class="charts-row">
+            <div class="chart-container"><h3>📈 消息处理量</h3><div id="messages-chart" class="chart"></div></div>
+            <div class="chart-container"><h3>🤖 LLM 调用延迟 (ms)</h3><div id="llm-chart" class="chart"></div></div>
+        </div>
+        <div class="footer">自动刷新间隔: 30秒 | <a href="/metrics" target="_blank" style="color:#4cc9f0">Prometheus Metrics</a></div>
+
+        <script>
+            let cpuChart, memoryChart, messagesChart, llmChart;
+
+            async function fetchMetrics() {
+                const res = await fetch('/admin/api/metrics?limit=50');
+                return await res.json();
+            }
+
+            function formatTime(iso) {
+                const d = new Date(iso);
+                return d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+            }
+
+            function initCharts() {
+                cpuChart = echarts.init(document.getElementById('cpu-chart'));
+                memoryChart = echarts.init(document.getElementById('memory-chart'));
+                messagesChart = echarts.init(document.getElementById('messages-chart'));
+                llmChart = echarts.init(document.getElementById('llm-chart'));
+            }
+
+            function renderStats(data) {
+                if (!data.length) return;
+                const latest = data[data.length - 1];
+                const first = data[0];
+                const newMsgs = latest.messages_processed - (first.messages_processed || 0);
+                const newLLM = latest.llm_calls - (first.llm_calls || 0);
+
+                document.getElementById('stats-row').innerHTML = `
+                    <div class="stat-card"><h3>💻 进程 CPU</h3><div class="value">${latest.process_cpu.toFixed(1)}<span class="unit">%</span></div></div>
+                    <div class="stat-card"><h3>🧠 进程内存</h3><div class="value">${latest.process_memory_mb.toFixed(0)}<span class="unit">MB</span></div></div>
+                    <div class="stat-card"><h3>💬 总消息数</h3><div class="value">${latest.messages_processed}<span class="unit"></span></div></div>
+                    <div class="stat-card"><h3>🤖 LLM 调用</h3><div class="value">${latest.llm_calls}<span class="unit"></span></div></div>
+                    <div class="stat-card"><h3>📦 订单创建</h3><div class="value">${latest.orders_created}<span class="unit"></span></div></div>
+                    <div class="stat-card"><h3>⚠️ 错误数</h3><div class="value ${latest.errors_count > 0 ? 'status-error' : ''}">${latest.errors_count}</div></div>
+                `;
+            }
+
+            function renderCharts(data) {
+                const times = data.map(d => formatTime(d.timestamp));
+                const cpu = data.map(d => d.process_cpu);
+                const memory = data.map(d => d.process_memory_mb);
+                const messages = data.map(d => d.messages_processed);
+                const llm = data.map(d => d.llm_avg_latency_ms);
+
+                const areaStyle = { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{offset:0,color:'rgba(76,201,240,0.3)'},{offset:1,color:'rgba(76,201,240,0.05)'}] } };
+                const lineStyle = { color: '#4cc9f0', width: 2 };
+
+                cpuChart.setOption({
+                    tooltip: { trigger: 'axis', backgroundColor: '#16213e', borderColor: '#4cc9f0', textStyle:{color:'#eee'} },
+                    grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                    xAxis: { type: 'category', data: times, axisLine: {lineStyle:{color:'#333'}}, axisLabel:{color:'#888'} },
+                    yAxis: { type: 'value', name: '%', axisLine: {lineStyle:{color:'#333'}}, splitLine:{lineStyle:{color:'#222'}}, axisLabel:{color:'#888'} },
+                    series: [{ type: 'line', data: cpu, smooth: true, symbol: 'none', lineStyle, areaStyle }]
+                });
+
+                memoryChart.setOption({
+                    tooltip: { trigger: 'axis', backgroundColor: '#16213e', borderColor: '#4cc9f0', textStyle:{color:'#eee'} },
+                    grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                    xAxis: { type: 'category', data: times, axisLine: {lineStyle:{color:'#333'}}, axisLabel:{color:'#888'} },
+                    yAxis: { type: 'value', name: 'MB', axisLine: {lineStyle:{color:'#333'}}, splitLine:{lineStyle:{color:'#222'}}, axisLabel:{color:'#888'} },
+                    series: [{ type: 'line', data: memory, smooth: true, symbol: 'none', lineStyle, areaStyle }]
+                });
+
+                messagesChart.setOption({
+                    tooltip: { trigger: 'axis', backgroundColor: '#16213e', borderColor: '#4ade80', textStyle:{color:'#eee'} },
+                    grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                    xAxis: { type: 'category', data: times, axisLine: {lineStyle:{color:'#333'}}, axisLabel:{color:'#888'} },
+                    yAxis: { type: 'value', name: '条', axisLine: {lineStyle:{color:'#333'}}, splitLine:{lineStyle:{color:'#222'}}, axisLabel:{color:'#888'} },
+                    series: [{ type: 'bar', data: messages, itemStyle: { color: '#4ade80' } }]
+                });
+
+                llmChart.setOption({
+                    tooltip: { trigger: 'axis', backgroundColor: '#16213e', borderColor: '#a78bfa', textStyle:{color:'#eee'} },
+                    grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+                    xAxis: { type: 'category', data: times, axisLine: {lineStyle:{color:'#333'}}, axisLabel:{color:'#888'} },
+                    yAxis: { type: 'value', name: 'ms', axisLine: {lineStyle:{color:'#333'}}, splitLine:{lineStyle:{color:'#222'}}, axisLabel:{color:'#888'} },
+                    series: [{ type: 'line', data: llm, smooth: true, symbol: 'none', lineStyle: { color: '#a78bfa', width: 2 }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{offset:0,color:'rgba(167,139,250,0.3)'},{offset:1,color:'rgba(167,139,250,0.05)'}] } } }]
+                });
+            }
+
+            async function refresh() {
+                try {
+                    const data = await fetchMetrics();
+                    if (data.length) {
+                        renderStats(data);
+                        renderCharts(data);
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch metrics:', e);
+                }
+            }
+
+            initCharts();
+            refresh();
+            setInterval(refresh, 30000);
+        </script>
+    </body>
+    </html>
+    '''
+    return web.Response(text=html, content_type='text/html')
+
+
 async def history_page(request):
     """用户对话历史管理界面"""
     if not verify_auth(request):
@@ -2049,10 +2266,12 @@ async def history_page(request):
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a2e; color: #eee; min-height: 100vh; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; }
             .header h1 { font-size: 22px; }
-            .header a { color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 6px; }
+            .header .nav { display: flex; gap: 10px; }
+            .header a { color: white; text-decoration: none; padding: 8px 16px; background: rgba(255,255,255,0.2); border-radius: 6px; font-size: 14px; }
             .header a:hover { background: rgba(255,255,255,0.3); }
+            .header a.active { background: white; color: #667eea; }
             .container { display: flex; height: calc(100vh - 70px); }
             .sidebar { width: 300px; background: #16213e; border-right: 1px solid #0f3460; overflow-y: auto; }
             .sidebar .search { padding: 12px; }
@@ -2083,7 +2302,11 @@ async def history_page(request):
     <body>
         <div class="header">
             <h1>💬 Conversation History</h1>
-            <a href="/admin">📚 Knowledge Base</a>
+            <div class="nav">
+                <a href="/admin">📚 知识库</a>
+                <a href="/admin/history" class="active">💬 对话历史</a>
+                <a href="/admin/dashboard">📊 监控面板</a>
+            </div>
         </div>
         <div class="container">
             <div class="sidebar">
@@ -2214,6 +2437,10 @@ def start_web_server():
     app.router.add_get('/admin/history', history_page)
     app.router.add_get('/admin/api/users', api_list_users)
     app.router.add_get('/admin/api/user/{user_id}', api_user_history)
+    # 监控相关路由
+    app.router.add_get('/admin/dashboard', dashboard_page)
+    app.router.add_get('/admin/api/metrics', api_metrics)
+    app.router.add_get('/metrics', metrics_endpoint)  # Prometheus 端点
 
     async def run_web_server():
         runner = web.AppRunner(app)
@@ -3130,6 +3357,10 @@ def create_bot() -> commands.Bot:
             await bot.process_commands(message)
             return
 
+        # ========== 监控埋点：消息计数 ==========
+        if METRICS_AVAILABLE:
+            get_metrics_collector().inc_message()
+
         # ========== 身份识别：管理员 vs 客户 ==========
         is_admin = message.author.id in ADMIN_USER_IDS
         user_id = str(message.author.id)
@@ -3702,6 +3933,22 @@ async def main():
     # 初始化识图工具（如果可用）
     if IMAGE_RECOGNIZER_AVAILABLE:
         init_image_recognizer()
+
+    # 启动指标收集定时任务
+    if METRICS_AVAILABLE:
+        collector = get_metrics_collector()
+        async def metrics_collector_loop():
+            """每 60 秒收集一次系统指标"""
+            while True:
+                try:
+                    collector.collect()
+                    # 每小时清理一次旧指标
+                    collector.cleanup_old_metrics(days=7)
+                except Exception as e:
+                    logger.debug(f"Metrics collection error: {e}")
+                await asyncio.sleep(60)
+        asyncio.create_task(metrics_collector_loop())
+        logger.info("📊 Metrics collector started (60s interval)")
 
     # 启动知识库管理 Web 服务
     logger.info("🌐 Starting Knowledge Base Admin UI...")
