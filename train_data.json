@@ -1,0 +1,187 @@
+{
+  "metadata": {
+    "total_samples": 20,
+    "domains": [
+      "order",
+      "knowledge",
+      "interaction",
+      "pricing"
+    ],
+    "created_at": "2026-04-01T18:00:00",
+    "description": "Discord NBA2K26 机器人的标准 LoRA 微调样本库"
+  },
+  "samples": [
+    {
+      "user_input": "我要下单NBA2K26",
+      "expected_output": "好的！我为您准备下单流程。请告诉我：\n1️⃣ 您想要哪个服务器？(Xbox/PlayStation/PC)\n2️⃣ VC需求量？(基础/中等/高)\n3️⃣ 快递地址在哪里？",
+      "domain": "order",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.95
+    },
+    {
+      "user_input": "这个套餐多少钱？",
+      "expected_output": "我可以看到您询问的套餐信息。请先告诉我具体是哪个套餐（如：基础版/专业版/VIP版），我会立即为您报价并说明包含的服务内容。",
+      "domain": "order",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.90
+    },
+    {
+      "user_input": "我要升级我的订单",
+      "expected_output": "好的，为您处理升级申请。请提供：\n📋 原订单号\n⬆️ 升级内容（更多VC/高级服务/延期）\n💰 预算范围\n我会根据您的需求提供最优方案。",
+      "domain": "order",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.92
+    },
+    {
+      "user_input": "什么时候能发货？",
+      "expected_output": "您的订单目前状态是：[查询订单系统]。一般情况下：\n📦 虚拟服务：立即发货\n📮 实体商品：1-3个工作日\n✈️ 国际快递：3-7个工作日\n您想了解具体的物流跟踪信息吗？",
+      "domain": "order",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.88
+    },
+    {
+      "user_input": "我要退货/退款",
+      "expected_output": "我理解您的需求。为了妥善处理退货申请，请告诉我：\n1️⃣ 退货原因（产品问题/不符合预期/其他）\n2️⃣ 商品现状（未使用/已使用）\n3️⃣ 希望的处理方式（退款/换货）\n我会为您快速处理，通常24小时内完成。",
+      "domain": "order",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.91
+    },
+    {
+      "user_input": "什么是防守切换？",
+      "expected_output": "防守切换（Switch Defense）是NBA 2K26中的高级防守技巧：\n🔄 快速转身跟防对手\n⏱️ 适合挡拆防守场景\n💡 使用方式：按X键(Xbox)或方块键(PS)\n⚠️ 过度使用容易被突破，建议配合防守站位使用\n您想了解更多防守技巧吗？",
+      "domain": "knowledge",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.94
+    },
+    {
+      "user_input": "怎样提高投篮命中率？",
+      "expected_output": "提高投篮命中率的核心要点：\n🎯 投篮窗口：绿色窗口最佳\n⏰ 最佳时机：对手防守距离远时\n🧠 技能搭配：投篮稳定性+投篮速度\n📊 练习模式：投篮训练营效果最佳\n您想要针对某个位置的投篮优化建议吗？",
+      "domain": "knowledge",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.93
+    },
+    {
+      "user_input": "哪个球员最适合得分后卫？",
+      "expected_output": "得分后卫的选择取决于您的游戏风格：\n🏀 速度型：选择速度>90的球员(如：Jamal Murray)\n💪 力量型：选择力量>85的球员(如：Devin Booker)\n🎯 均衡型：综合属性>85的球员(如：LaMelo Ball)\n建议您先在训练营试玩，找到最适合您的风格。您想要球员推荐吗？",
+      "domain": "knowledge",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.91
+    },
+    {
+      "user_input": "如何快速升级我的球员？",
+      "expected_output": "球员升级的高效路线：\n⚡ 快速升级（1-2小时）：竞赛模式+经验加成卡\n📈 稳定升级（每天30分钟）：日常任务+周挑战\n💰 付费加速（可选）：购买经验加成包\n🎮 最佳实践：配合朋友联机获得+50%经验加成\n您目前球员等级是多少？",
+      "domain": "knowledge",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.90
+    },
+    {
+      "user_input": "帮我推荐一个DF配置",
+      "expected_output": "很高兴为您推荐！为了提供最适合的配置，我需要了解：\n1️⃣ 您的游戏风格（防守/均衡/进攻）\n2️⃣ 主要位置（前锋/后卫/中锋）\n3️⃣ 预算范围（基础/中等/高端）\n4️⃣ 在线vs离线的侧重\n根据这些信息，我会给出3个优化方案供您选择。",
+      "domain": "interaction",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.92
+    },
+    {
+      "user_input": "我发现个BUG",
+      "expected_output": "感谢您的反馈！这对我们改进游戏体验非常重要。请提供：\n🐛 BUG描述：具体发生了什么\n📍 出现位置：在哪个模式/场景\n🔄 复现步骤：如何重现这个问题\n📸 截图/视频（如可能）\n我们会立即转交技术团队处理。预计48小时内回复。",
+      "domain": "interaction",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.90
+    },
+    {
+      "user_input": "我想加入俱乐部",
+      "expected_output": "欢迎加入我们的俱乐部社区！\n🏢 俱乐部优势：\n📊 排行榜排名\n💰 额外奖励\n👥 与其他玩家联机\n🎮 参加俱乐部赛事\n\n您感兴趣的是竞技俱乐部还是休闲俱乐部？我可以推荐合适的选项。",
+      "domain": "interaction",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.89
+    },
+    {
+      "user_input": "售后保障怎么样",
+      "expected_output": "我们提供业界领先的售后保障：\n✅ 7天无理由退款\n✅ 30天免费技术支持\n✅ 终身账户安全保护\n✅ 官方社区优先支持\n✅ 定期免费更新\n\n具体保障内容已发送到您的账户邮箱。如有任何疑问，欢迎随时咨询。",
+      "domain": "interaction",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.93
+    },
+    {
+      "user_input": "有没有优惠活动？",
+      "expected_output": "🎉 当前优惠活动：\n🔥 新用户优惠：首单享8折（代码：NEW8OFF）\n📅 周末特惠：周五-周日全场88折\n🎁 积分兑换：每消费100元送10积分\n👥 推荐返利：邀请朋友成功下单，双方各得20元返利\n🎯 VIP会员：月付299享全年权益\n\n您对哪个活动感兴趣？",
+      "domain": "pricing",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.94
+    },
+    {
+      "user_input": "这个价格能便宜吗？",
+      "expected_output": "感谢您的询问！我可以为您查看是否有可用的优惠：\n💳 优惠券使用（如有）\n📊 套餐对比（寻找更高性价比方案）\n⏰ 促销活动时间\n👑 会员折扣升级\n\n请告诉我您的大致预算，我会为您找到最划算的方案！",
+      "domain": "pricing",
+      "weight": 1.0,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.91
+    },
+    {
+      "user_input": "能给我介绍一下这款游戏吗？",
+      "expected_output": "当然！NBA 2K26 是全球最逼真的篮球游戏：\n🏀 游戏特点：\n   • 真实的球员扫描和动作捕捉\n   • 自由竞争和MyCAREER生涯模式\n   • 联机对战和俱乐部系统\n   • 多种游戏模式适合不同玩家\n\n🎮 游玩建议：\n   • 新手：从MyCAREER生涯模式开始\n   • 进阶：参加MyTeam集卡模式\n   • 竞技：加入俱乐部与好友对战\n\n想了解更多具体内容吗？",
+      "domain": "knowledge",
+      "weight": 0.9,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.92
+    },
+    {
+      "user_input": "怎样才能免费试玩？",
+      "expected_output": "很高兴为您介绍免费试玩方案：\n🆓 官方免费试玩：\n   • 周末限时免费（每月2-3次）\n   • 可体验核心游戏模式\n   • 无需购买即可参与\n\n💡 优惠方案：\n   • 首次购买享8折优惠（代码：NEW8OFF）\n   • 30天体验版：₹399（可升级为完整版）\n   • 生涯模式免费片段\n\n📱 下载体验版：[链接]\n\n有任何其他疑问吗？",
+      "domain": "pricing",
+      "weight": 0.9,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.88
+    },
+    {
+      "user_input": "游戏需要什么配置？",
+      "expected_output": "NBA 2K26 的系统需求：\n\n🖥️ 最低配置（1080p@30fps）：\n   • CPU：Intel i5-8400 / AMD Ryzen 5 2600\n   • GPU：RTX 1660 / RX 580\n   • 内存：8GB RAM\n   • 存储：120GB SSD\n\n⚡ 推荐配置（1440p@60fps）：\n   • CPU：Intel i7-10700K / AMD Ryzen 7 3700X\n   • GPU：RTX 2080 / RX 5700XT\n   • 内存：16GB RAM\n   • 存储：120GB NVMe SSD\n\n🚀 高端配置（4K@60fps+）：\n   • CPU：Intel i9 / AMD Ryzen 9\n   • GPU：RTX 3080 及以上\n   • 内存：32GB RAM\n   • 存储：NVMe SSD\n\n您的电脑配置是什么样的？",
+      "domain": "knowledge",
+      "weight": 0.9,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.93
+    },
+    {
+      "user_input": "如何解决游戏卡顿问题？",
+      "expected_output": "游戏卡顿解决方案（按优先级）：\n\n🔧 系统级别：\n   1️⃣ 关闭后台应用（浏览器、QQ等）\n   2️⃣ 更新显卡驱动（NVIDIA/AMD官网）\n   3️⃣ 验证游戏文件完整性\n   4️⃣ 清理垃圾文件（CCleaner）\n\n⚙️ 游戏设置优化：\n   • 降低分辨率到1080p\n   • 关闭阴影、反射等高级效果\n   • 限制帧率到60fps\n   • 关闭垂直同步\n\n🎮 游戏内优化：\n   • 只在主菜单启用高效能模式\n   • 减少场景复杂度\n   • 使用最小UI\n\n💻 硬件升级建议：\n   • 升级至SSD（最重要）\n   • 增加内存至16GB\n   • 升级独立显卡\n\n问题持续存在吗？",
+      "domain": "interaction",
+      "weight": 0.9,
+      "source": "template",
+      "language": "zh",
+      "confidence": 0.91
+    }
+  ]
+}
+

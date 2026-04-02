@@ -29,6 +29,23 @@ from typing import Dict, List, Optional, Tuple
 # 全局 bot 缓存（供工具函数访问 guild/channel）
 _bot_cache = []
 
+# 响应缓存系统
+try:
+    from cache.response_cache import get_cache, preload_cache as _preload_response_cache
+    _RESPONSE_CACHE_AVAILABLE = True
+except Exception as _e:
+    logger_setup = logging.getLogger("DiscordBot")
+    logger_setup.warning(f"⚠️ Response cache not available: {_e}")
+    _RESPONSE_CACHE_AVAILABLE = False
+
+# 获取全局缓存实例
+_response_cache = None
+if _RESPONSE_CACHE_AVAILABLE:
+    try:
+        _response_cache = get_cache()
+    except Exception:
+        pass
+
 # 订单数据库
 try:
     from database import Database as OrderDatabase
@@ -85,6 +102,16 @@ except ImportError:
     METRICS_AVAILABLE = False
     logger_setup = logging.getLogger("DiscordBot")
     logger_setup.warning("⚠️ System monitor not available.")
+
+# 导入 Supervisor 多 Agent 协作模块
+try:
+    from agent.supervisor_agent import get_supervisor, AgentRoute, RouteDecision
+    from agent.payment_review_agent import get_payment_review_agent, ReviewVerdict
+    SUPERVISOR_AVAILABLE = True
+except ImportError:
+    SUPERVISOR_AVAILABLE = False
+    logger_setup = logging.getLogger("DiscordBot")
+    logger_setup.warning("⚠️ Supervisor multi-agent module not available.")
 
 # ====================== 日志配置（生产级）======================
 logging.basicConfig(
@@ -772,17 +799,35 @@ if LANGCHAIN_AVAILABLE:
 
 
     @tool
-    def send_payment_confirmation(user_id: str, amount: float, service_desc: str, channel_id: str) -> str:
+    def send_payment_confirmation(user_id: str = "", amount: float = 0, service_desc: str = "", channel_id: str = "") -> str:
         """
         在咨询频道发送支付确认请求消息（带确认按钮），管理员点击后自动创建订单。
         当用户明确表达购买意图（如 "I want to buy", "order now", "let's go" 等）后调用此工具。
         参数:
-        - user_id: 客户 Discord 用户 ID
-        - amount: 订单金额（数字）
+        - user_id: 客户 Discord 用户 ID（从 [CURRENT_USER_ID: xxx] 中提取纯数字 ID）
+        - amount: 订单金额（数字），如 25.0
         - service_desc: 服务描述（如 "50x Rep Sleeve + Level 40"）
-        - channel_id: 当前频道 ID
+        - channel_id: 当前频道 ID（从 [CURRENT_CHANNEL_ID: xxx] 中提取纯数字 ID）
+
+        ⚠️ 注意：从上下文中提取 ID 时，只取纯数字部分，不要包含 "user_id=" 或 "channel_id=" 前缀。
         """
         try:
+            # 容错：LLM 可能传入格式混乱的参数，自动提取纯数字 ID
+            # 例如 "user_id=6104...\nchannel_id=..." → 提取为纯数字
+            import re as _re
+            if user_id:
+                digits_match = _re.search(r'\d{15,20}', str(user_id))
+                if digits_match:
+                    user_id = digits_match.group()
+            if channel_id:
+                digits_match = _re.search(r'\d{15,20}', str(channel_id))
+                if digits_match:
+                    channel_id = digits_match.group()
+
+            # 缺少关键参数时返回友好错误而非崩溃
+            if not user_id or not channel_id:
+                return f"Missing required parameters. user_id={user_id}, channel_id={channel_id}. Cannot send payment confirmation."
+
             # 异步发送消息（在事件循环中调度）
             loop = asyncio.get_event_loop()
 
@@ -1023,6 +1068,7 @@ class AIService:
 
 IMPORTANT RULES:
 1. NEVER confirm payment unless someone EXPLICITLY says they already sent money (e.g., "paid", "already paid", "sent the money", "payment confirmed", "已付", "已付款", "I paid", "money sent"). Admin providing a crypto address or payment info is NOT payment confirmation — it means payment hasn't happened yet.
+0. ANTI-HALLUCINATION: If you cannot find specific information (price, ETA, service details) in the knowledge base or tools, NEVER make up numbers or details. Instead say "Let me check with the admin for the exact details" or "I don't have that specific info right now, please contact the admin." This is CRITICAL — wrong prices cause customer disputes.
 2. If user asks about price/cost/wants to know pricing → Use get_price tool
 3. If user asks about "my order", "order status", "track order", "where is my order" → Use check_order_status tool
 4. If user says "do you know me", "who am I", "remember me" → Review USER HISTORY and summarize their past interactions
@@ -1034,6 +1080,9 @@ IMPORTANT RULES:
 10. When using send_payment_confirmation, you MUST pass the user_id (from USER HISTORY), amount (total price), service_desc, and channel_id (current channel)
 11. If user says they want to talk to admin/owner/real person, say briefly that the admin has been notified and stay quiet. Do NOT continue trying to sell or push orders.
 12. Admin sending crypto addresses (Bitcoin, Ethereum, etc.), PayPal info, or payment instructions = WAITING for payment, NOT confirmed. Never treat this as payment received.
+13. NEVER fabricate prices or time estimates. Always use get_price tool for pricing. If get_price returns no result, tell the customer to contact admin for a custom quote.
+14. If a customer mentions they already placed/paid for an order that you cannot find in the system, politely ask them to provide the order ID or transaction details so the admin can look it up. Do NOT assume the order doesn't exist.
+15. Keep answers SHORT — max 3-4 sentences unless the customer asks for detailed info.
 
 PAYMENT CONFIRMATION FLOW (CRITICAL — ONLY trigger on EXPLICIT payment confirmation):
 ⚠️ ONLY use confirm_payment when someone EXPLICITLY states money was sent/received.
@@ -1209,7 +1258,8 @@ Thought: {agent_scratchpad}""")
                 tools=tools,
                 verbose=False,
                 handle_parsing_errors=True,
-                max_iterations=5
+                max_iterations=8,
+                max_execution_time=60
             )
 
         except Exception as e:
@@ -1256,6 +1306,12 @@ Thought: {agent_scratchpad}""")
             )
 
             reply = result.get("output", "").strip()
+
+            # Agent iteration limit fallback
+            if not reply:
+                logger.warning("Agent returned empty output (iteration limit)")
+                reply = "Sorry, I couldn't process that fully. Let me get the admin to help you!"
+                return reply, False
 
             # 检查是否包含订单确认信息
             has_intent = (
@@ -1337,6 +1393,25 @@ Thought: {agent_scratchpad}""")
                         await context_manager.save_context(channel_id, user_msg, reply_text)
                     except Exception as e:
                         logger.warning(f"⚠️ Failed to save context: {e}")
+
+                    # 🔴 新增：记录付款意图的消息
+                    if ORDER_DB_AVAILABLE and order_db:
+                        try:
+                            order_db.log_message(
+                                order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                                source="discord",
+                                sender=f"user_{user_id}" if user_id else "unknown",
+                                content=user_msg
+                            )
+                            order_db.log_message(
+                                order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                                source="discord",
+                                sender="payment_detector",
+                                content=reply_text
+                            )
+                        except Exception as e:
+                            logger.debug(f"⚠️ Failed to log payment message: {e}")
+
                     logger.info(f"💳 Payment quick-path: service={service_desc}, amount={amount}")
                     return reply_text, True, view
             except Exception as e:
@@ -1362,12 +1437,68 @@ Thought: {agent_scratchpad}""")
                         await context_manager.save_context(channel_id, user_msg, reply_text)
                     except Exception as e:
                         logger.warning(f"⚠️ Failed to save context: {e}")
+
+                    # 🔴 新增：记录购买意向的消息
+                    if ORDER_DB_AVAILABLE and order_db:
+                        try:
+                            order_db.log_message(
+                                order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                                source="discord",
+                                sender=f"user_{user_id}" if user_id else "unknown",
+                                content=user_msg
+                            )
+                            order_db.log_message(
+                                order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                                source="discord",
+                                sender="purchase_detector",
+                                content=reply_text
+                            )
+                        except Exception as e:
+                            logger.debug(f"⚠️ Failed to log purchase message: {e}")
+
                     logger.info(f"📦 Purchase intent quick-path: service={service_desc}, amount={amount}")
                     return reply_text, True, view
             except Exception as e:
                 logger.warning(f"⚠️ Purchase intent quick-path failed: {e}")
 
-        # ========== 第一步：关键词快速回复 (<500ms) ==========
+        # ========== 第一步：响应缓存查询 (<1ms) ==========
+        if _response_cache:
+            try:
+                cached = _response_cache.get(user_msg)
+                if cached:
+                    reply = cached.get("answer", "") if isinstance(cached, dict) else str(cached)
+                    if reply:
+                        try:
+                            await context_manager.save_context(channel_id, user_msg, reply)
+                        except Exception:
+                            pass
+
+                        # 🔴 新增：记录缓存命中的消息
+                        if ORDER_DB_AVAILABLE and order_db:
+                            try:
+                                order_db.log_message(
+                                    order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                                    source="discord",
+                                    sender=f"user_{user_id}" if user_id else "unknown",
+                                    content=user_msg
+                                )
+                                order_db.log_message(
+                                    order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                                    source="discord",
+                                    sender="cache",
+                                    content=reply
+                                )
+                            except Exception as e:
+                                logger.debug(f"⚠️ Failed to log cached message: {e}")
+
+                        logger.info(f"🎯 Cache hit: {user_msg[:30]}... -> {reply[:30]}...")
+                        if METRICS_AVAILABLE:
+                            get_metrics_collector().inc_cache_hit()
+                        return reply, False, None
+            except Exception as e:
+                logger.debug(f"Cache lookup failed: {e}")
+
+        # ========== 第二步：关键词快速回复 (<500ms) ==========
         quick_result = self._quick_reply(user_msg)
         if quick_result:
             reply, has_intent = quick_result
@@ -1376,6 +1507,25 @@ Thought: {agent_scratchpad}""")
                 await context_manager.save_context(channel_id, user_msg, reply)
             except Exception as e:
                 logger.warning(f"⚠️ Failed to save context: {e}")
+
+            # 🔴 新增：记录快速回复的消息
+            if ORDER_DB_AVAILABLE and order_db:
+                try:
+                    order_db.log_message(
+                        order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                        source="discord",
+                        sender=f"user_{user_id}" if user_id else "unknown",
+                        content=user_msg
+                    )
+                    order_db.log_message(
+                        order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                        source="discord",
+                        sender="quick_reply",
+                        content=reply
+                    )
+                except Exception as e:
+                    logger.debug(f"⚠️ Failed to log quick reply: {e}")
+
             logger.info(f"⚡ Quick reply: {user_msg[:30]}... -> {reply[:30]}...")
             return reply, has_intent, None
 
@@ -1389,13 +1539,38 @@ Thought: {agent_scratchpad}""")
                 history = []
 
             react_reply, react_intent = await self._call_react_agent(user_msg, channel_id, history,
-                                                                     user_memory_summary=user_memory_summary,
-                                                                     user_id=user_id)
+                                                                      user_memory_summary=user_memory_summary,
+                                                                      user_id=user_id)
             if react_reply:  # ReAct Agent 成功处理
+                # 写入响应缓存
+                if _response_cache:
+                    try:
+                        _response_cache.set(user_msg, {"answer": react_reply}, category="ai_response")
+                    except Exception:
+                        pass
                 try:
                     await context_manager.save_context(channel_id, user_msg, react_reply)
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to save context: {e}")
+
+                # 🔴 新增：记录 ReAct Agent 的消息
+                if ORDER_DB_AVAILABLE and order_db:
+                    try:
+                        order_db.log_message(
+                            order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                            source="discord",
+                            sender=f"user_{user_id}" if user_id else "unknown",
+                            content=user_msg
+                        )
+                        order_db.log_message(
+                            order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                            source="discord",
+                            sender="agent",
+                            content=react_reply
+                        )
+                    except Exception as e:
+                        logger.debug(f"⚠️ Failed to log agent message: {e}")
+
                 logger.info(f"✅ ReAct Agent handled: {user_msg[:30]}... -> {react_reply[:40]}...")
                 return react_reply, react_intent, None
 
@@ -1567,6 +1742,26 @@ Examples:
                     logger.info(f"✅ AI reply: {user_msg[:30]}... -> {ai_reply[:30]}...")
                 except Exception as e:
                     logger.warning(f"⚠️ Failed to save AI response: {e}")
+
+                # 🔴 新增：记录消息到日志中心
+                if ORDER_DB_AVAILABLE and order_db:
+                    try:
+                        order_db.log_message(
+                            order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                            source="discord",
+                            sender=f"user_{user_id}" if user_id else "unknown",
+                            content=user_msg
+                        )
+                        order_db.log_message(
+                            order_id=f"user_{user_id}" if user_id else f"channel_{channel_id}",
+                            source="discord",
+                            sender="bot",
+                            content=ai_reply
+                        )
+                        logger.info(f"📝 Logged to message_log: user_msg + ai_reply")
+                    except Exception as e:
+                        logger.debug(f"⚠️ Failed to log message: {e}")
+
                 return ai_reply, has_order_intent, None
             else:
                 # AI 调用失败，返回友好的默认消息
@@ -1715,8 +1910,7 @@ def verify_auth(request):
 
 async def admin_page(request):
     """管理界面 HTML"""
-    if not verify_auth(request):
-        return web.Response(status=401, text="Unauthorized")
+    # auth 由前端 JS 处理
 
     html = '''
     <!DOCTYPE html>
@@ -2098,8 +2292,7 @@ async def api_metrics(request):
 
 async def dashboard_page(request):
     """监控仪表板 HTML"""
-    if not verify_auth(request):
-        return web.Response(status=401, text="Unauthorized")
+    # auth 由前端 JS 处理（通过 Bearer token 调用 API）
 
     html = '''
     <!DOCTYPE html>
@@ -2133,9 +2326,10 @@ async def dashboard_page(request):
     </head>
     <body>
         <div class="nav">
-            <a href="/admin">📚 知识库管理</a>
-            <a href="/admin/history">💬 对话历史</a>
-            <a href="/admin/dashboard">📊 监控仪表板</a>
+            <a href="/admin">📚 知识库</a>
+            <a href="/admin/history">👤 按用户</a>
+            <a href="/admin/chat">💬 按频道</a>
+            <a href="/admin/dashboard">📊 监控</a>
         </div>
         <h1>📊 NBA 2K26 Bot 系统监控</h1>
 
@@ -2152,9 +2346,14 @@ async def dashboard_page(request):
 
         <script>
             let cpuChart, memoryChart, messagesChart, llmChart;
+            const password = localStorage.getItem('admin_pwd') || prompt("Enter admin password:", "");
+            localStorage.setItem('admin_pwd', password);
+            const headers = password ? { 'Authorization': `Bearer ${password}` } : {};
 
             async function fetchMetrics() {
-                const res = await fetch('/admin/api/metrics?limit=50');
+                const res = await fetch('/admin/api/metrics?limit=50', { headers });
+                if (res.status === 401) { alert("Unauthorized"); return []; }
+                if (!res.ok) return [];
                 return await res.json();
             }
 
@@ -2252,10 +2451,341 @@ async def dashboard_page(request):
     return web.Response(text=html, content_type='text/html')
 
 
-async def history_page(request):
-    """用户对话历史管理界面"""
+async def api_list_channels(request):
+    """API: 按频道分组，返回所有有对话记录的频道列表"""
     if not verify_auth(request):
         return web.Response(status=401, text="Unauthorized")
+    try:
+        import sqlite3
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_context.db")
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute("""
+            SELECT channel_id, channel_name, COUNT(*) as msg_count, MAX(timestamp) as last_active,
+                   COUNT(DISTINCT user_id) as user_count
+            FROM user_memory
+            WHERE channel_id IS NOT NULL AND channel_id != ''
+            GROUP BY channel_id
+            ORDER BY last_active DESC
+            LIMIT 100
+        """)
+        rows = c.fetchall()
+        conn.close()
+        channels = []
+        for row in rows:
+            ts = time.strftime("%Y-%m-%d %H:%M", time.localtime(row[3]))
+            channels.append({
+                "channel_id": row[0],
+                "channel_name": row[1] or row[0],
+                "msg_count": row[2],
+                "last_active": ts,
+                "last_ts": row[3],
+                "user_count": row[4]
+            })
+        return web.json_response(channels)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def api_channel_messages(request):
+    """API: 获取指定频道内所有消息（所有人，按时间排序）"""
+    if not verify_auth(request):
+        return web.Response(status=401, text="Unauthorized")
+    channel_id = request.match_info.get("channel_id", "")
+    limit = int(request.query.get("limit", "500"))
+    if not channel_id:
+        return web.json_response({"error": "channel_id required"}, status=400)
+    try:
+        import sqlite3
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot_context.db")
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        c.execute("""
+            SELECT role, content, author_name, user_id, channel_id, channel_name, timestamp
+            FROM user_memory
+            WHERE channel_id = ?
+            ORDER BY timestamp ASC
+            LIMIT ?
+        """, (channel_id, limit))
+        rows = c.fetchall()
+        conn.close()
+        messages = []
+        for row in rows:
+            ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(row[6]))
+            messages.append({
+                "role": row[0],
+                "content": row[1],
+                "author_name": row[2],
+                "user_id": row[3],
+                "channel_id": row[4],
+                "channel_name": row[5],
+                "timestamp": ts,
+                "ts": row[6]
+            })
+        return web.json_response(messages)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
+async def chat_page(request):
+    """Discord 风格频道聊天室可视化页面"""
+    # auth 由前端 JS 处理
+
+    html = '''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Channel Chat - Discord Style</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'gg sans', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #313338; color: #dbdee1; min-height: 100vh; }
+
+            /* Header */
+            .header { background: #1e1f22; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #1e1f22; }
+            .header h1 { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+            .header h1 .icon { font-size: 20px; }
+            .nav { display: flex; gap: 8px; }
+            .nav a { color: #b5bac1; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 14px; transition: all 0.15s; }
+            .nav a:hover { background: #3f4147; color: #dbdee1; }
+            .nav a.active { background: #404249; color: #fff; }
+
+            /* Layout */
+            .container { display: flex; height: calc(100vh - 52px); }
+
+            /* Sidebar - Channel List */
+            .sidebar { width: 240px; background: #2b2d31; display: flex; flex-direction: column; }
+            .sidebar-header { padding: 12px 16px; font-size: 12px; font-weight: 600; color: #949ba4; text-transform: uppercase; letter-spacing: 0.02em; }
+            .search-box { padding: 0 12px 8px; }
+            .search-box input { width: 100%; padding: 6px 10px; background: #1e1f22; border: none; border-radius: 4px; color: #dbdee1; font-size: 14px; outline: none; }
+            .search-box input::placeholder { color: #949ba4; }
+            .search-box input:focus { outline: 2px solid #5865f2; }
+            .channel-list { flex: 1; overflow-y: auto; }
+            .channel-item { display: flex; align-items: center; padding: 8px 12px; cursor: pointer; color: #949ba4; transition: all 0.15s; gap: 8px; }
+            .channel-item:hover { background: #35373c; color: #dbdee1; }
+            .channel-item.active { background: #404249; color: #fff; border-radius: 4px; margin: 0 4px; padding: 8px 8px; }
+            .channel-item .hash { color: #80848e; font-size: 18px; }
+            .channel-item .info { flex: 1; min-width: 0; }
+            .channel-item .name { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .channel-item .meta { font-size: 11px; color: #80848e; margin-top: 2px; }
+            .channel-item .badge { background: #f23f43; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 8px; font-weight: 700; }
+
+            /* Main Chat Area */
+            .main { flex: 1; display: flex; flex-direction: column; background: #313338; }
+            .chat-header { padding: 12px 16px; background: #313338; border-bottom: 1px solid #1e1f22; display: flex; align-items: center; gap: 12px; }
+            .chat-header .hash { color: #80848e; font-size: 24px; }
+            .chat-header .title { font-size: 16px; font-weight: 600; }
+            .chat-header .divider { color: #3f4147; margin: 0 8px; }
+            .chat-header .subtitle { font-size: 14px; color: #949ba4; }
+
+            /* Messages */
+            .messages { flex: 1; overflow-y: auto; padding: 16px; }
+            .msg-group { display: flex; padding: 4px 0; margin: 8px 0; border-radius: 8px; }
+            .msg-group:hover { background: #2e3035; }
+            .msg-avatar { width: 40px; height: 40px; border-radius: 50%; margin-right: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+            .msg-avatar.user { background: linear-gradient(135deg, #5865f2, #eb459e); }
+            .msg-avatar.admin { background: linear-gradient(135deg, #57f287, #fee75c); }
+            .msg-avatar.assistant { background: linear-gradient(135deg, #5865f2, #fee75c); }
+            .msg-avatar.system { background: #4e5058; }
+
+            .msg-content-wrapper { flex: 1; min-width: 0; }
+            .msg-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+            .msg-author { font-weight: 600; font-size: 15px; }
+            .msg-author.user { color: #5865f2; }
+            .msg-author.admin { color: #57f287; }
+            .msg-author.assistant { color: #fee75c; }
+            .msg-author.system { color: #949ba4; }
+            .msg-timestamp { font-size: 11px; color: #949ba4; }
+            .msg-content { font-size: 15px; line-height: 1.4; white-space: normal; word-break: break-word; }
+            .msg-content img { max-width: 300px; border-radius: 8px; margin-top: 8px; }
+
+            /* Bot badge */
+            .bot-badge { background: #5865f2; color: #fff; font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: 600; margin-left: 4px; vertical-align: middle; }
+
+            /* Empty State */
+            .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #949ba4; }
+            .empty-state .icon { font-size: 64px; margin-bottom: 16px; }
+            .empty-state .text { font-size: 16px; }
+
+            /* Scrollbar */
+            ::-webkit-scrollbar { width: 8px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+            ::-webkit-scrollbar-thumb { background: #1e1f22; border-radius: 4px; }
+            ::-webkit-scrollbar-thumb:hover { background: #141517; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1><span class="icon">💬</span> Channel Chat</h1>
+            <div class="nav">
+                <a href="/admin">📚 知识库</a>
+                <a href="/admin/history">👤 按用户</a>
+                <a href="/admin/chat" class="active">💬 按频道</a>
+                <a href="/admin/dashboard">📊 监控</a>
+            </div>
+        </div>
+        <div class="container">
+            <div class="sidebar">
+                <div class="sidebar-header">Channels</div>
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search channels..." oninput="filterChannels()">
+                </div>
+                <div class="channel-list" id="channelList">
+                    <div class="empty-state" style="padding: 20px; text-align: center;">
+                        <div class="icon" style="font-size: 32px;">⏳</div>
+                        <div style="font-size: 13px; margin-top: 8px;">Loading channels...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="main">
+                <div class="chat-header" id="chatHeader" style="display:none;">
+                    <span class="hash">#</span>
+                    <span class="title" id="channelTitle">-</span>
+                    <span class="divider">|</span>
+                    <span class="subtitle" id="channelSubtitle">-</span>
+                </div>
+                <div class="messages" id="messagesDiv">
+                    <div class="empty-state">
+                        <div class="icon">💬</div>
+                        <div class="text">Select a channel to view conversation</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            const password = localStorage.getItem('admin_pwd') || prompt("Enter admin password:", "");
+            localStorage.setItem('admin_pwd', password);
+            const headers = password ? { 'Authorization': `Bearer ${password}` } : {};
+            let allChannels = [];
+            let currentChannelId = null;
+
+            async function fetchJSON(url) {
+                const res = await fetch(url, { headers });
+                if (res.status === 401) { alert("Unauthorized"); return null; }
+                if (!res.ok) throw new Error(`${res.status}`);
+                return await res.json();
+            }
+
+            async function loadChannels() {
+                try {
+                    allChannels = await fetchJSON('/admin/api/channels') || [];
+                    renderChannels(allChannels);
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('channelList').innerHTML = '<div style="padding:20px;color:#f87171;text-align:center;">Failed to load channels</div>';
+                }
+            }
+
+            function renderChannels(channels) {
+                const div = document.getElementById('channelList');
+                if (!channels.length) {
+                    div.innerHTML = '<div style="padding:20px;color:#949ba4;text-align:center;font-size:13px;">No channels found</div>';
+                    return;
+                }
+                div.innerHTML = channels.map(ch => {
+                    const shortName = ch.channel_name.length > 18 ? ch.channel_name.substring(0, 18) + '...' : ch.channel_name;
+                    return `
+                    <div class="channel-item ${ch.channel_id === currentChannelId ? 'active' : ''}" onclick="selectChannel('${ch.channel_id}')">
+                        <span class="hash">#</span>
+                        <div class="info">
+                            <div class="name">${escapeHtml(shortName)}</div>
+                            <div class="meta">${ch.msg_count} msgs · ${ch.user_count} users</div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+
+            function filterChannels() {
+                const q = document.getElementById('searchInput').value.toLowerCase();
+                const filtered = allChannels.filter(ch =>
+                    ch.channel_name.toLowerCase().includes(q) || ch.channel_id.includes(q)
+                );
+                renderChannels(filtered);
+            }
+
+            async function selectChannel(channelId) {
+                currentChannelId = channelId;
+                filterChannels(); // re-render to update active state
+
+                const ch = allChannels.find(c => c.channel_id === channelId);
+                document.getElementById('chatHeader').style.display = 'flex';
+                document.getElementById('channelTitle').textContent = ch ? ch.channel_name : channelId;
+                document.getElementById('channelSubtitle').textContent = ch ? `${ch.msg_count} messages · ${ch.user_count} participants` : '';
+
+                const messagesDiv = document.getElementById('messagesDiv');
+                messagesDiv.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><div class="text">Loading messages...</div></div>';
+
+                try {
+                    const msgs = await fetchJSON(`/admin/api/channel/${encodeURIComponent(channelId)}?limit=300`) || [];
+                    if (!msgs.length) {
+                        messagesDiv.innerHTML = '<div class="empty-state"><div class="icon">📭</div><div class="text">No messages in this channel</div></div>';
+                        return;
+                    }
+
+                    // Group messages by author (Discord style grouping)
+                    let html = '';
+                    let lastAuthor = null;
+                    let lastTime = null;
+
+                    msgs.forEach((m, idx) => {
+                        const roleClass = m.role === 'admin' ? 'admin' : m.role === 'user' ? 'user' : m.role === 'assistant' ? 'assistant' : 'system';
+                        const roleIcon = m.role === 'admin' ? '👑' : m.role === 'user' ? '👤' : m.role === 'assistant' ? '🤖' : '⚙️';
+                        const authorName = m.author_name || (m.role === 'assistant' ? 'Bot' : m.role);
+
+                        // Check if we should start a new group (different author or >5 min gap)
+                        const msgTime = new Date(m.timestamp);
+                        const timeDiff = lastTime ? (msgTime - lastTime) / 60000 : 999; // minutes
+                        const isNewGroup = (lastAuthor !== m.user_id + m.role) || timeDiff > 5;
+
+                        if (isNewGroup) {
+                            if (lastAuthor !== null) html += `</div></div>`; // close previous msg-content-wrapper and msg-group
+                            html += `<div class="msg-group">
+                                <div class="msg-avatar ${roleClass}">${roleIcon}</div>
+                                <div class="msg-content-wrapper">
+                                    <div class="msg-header">
+                                        <span class="msg-author ${roleClass}">${escapeHtml(authorName)}</span>
+                                        ${m.role === 'assistant' ? '<span class="bot-badge">BOT</span>' : ''}
+                                        <span class="msg-timestamp">${m.timestamp}</span>
+                                    </div>
+                                    <div class="msg-content">${escapeHtml(m.content)}</div>`;
+                        } else {
+                            // Same author, just append timestamp + content
+                            html += `<div class="msg-header" style="margin-top:8px;">
+                                        <span class="msg-timestamp">${m.timestamp}</span>
+                                    </div>
+                                    <div class="msg-content">${escapeHtml(m.content)}</div>`;
+                        }
+
+                        lastAuthor = m.user_id + m.role;
+                        lastTime = msgTime;
+                    });
+
+                    if (lastAuthor !== null) html += `</div></div>`; // close final wrappers
+                    messagesDiv.innerHTML = html;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                } catch (e) {
+                    messagesDiv.innerHTML = `<div class="empty-state"><div class="icon">❌</div><div class="text">Error: ${e.message}</div></div>`;
+                }
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            loadChannels();
+        </script>
+    </body>
+    </html>
+    '''
+    return web.Response(text=html, content_type='text/html')
+
+
+async def history_page(request):
+    """用户对话历史管理界面（按用户维度）"""
+    # auth 由前端 JS 处理
 
     html = '''
     <!DOCTYPE html>
@@ -2304,8 +2834,9 @@ async def history_page(request):
             <h1>💬 Conversation History</h1>
             <div class="nav">
                 <a href="/admin">📚 知识库</a>
-                <a href="/admin/history" class="active">💬 对话历史</a>
-                <a href="/admin/dashboard">📊 监控面板</a>
+                <a href="/admin/history" class="active">👤 按用户</a>
+                <a href="/admin/chat">💬 按频道</a>
+                <a href="/admin/dashboard">📊 监控</a>
             </div>
         </div>
         <div class="container">
@@ -2437,6 +2968,10 @@ def start_web_server():
     app.router.add_get('/admin/history', history_page)
     app.router.add_get('/admin/api/users', api_list_users)
     app.router.add_get('/admin/api/user/{user_id}', api_user_history)
+    # 聊天室可视化（Discord 风格）
+    app.router.add_get('/admin/chat', chat_page)
+    app.router.add_get('/admin/api/channels', api_list_channels)
+    app.router.add_get('/admin/api/channel/{channel_id}', api_channel_messages)
     # 监控相关路由
     app.router.add_get('/admin/dashboard', dashboard_page)
     app.router.add_get('/admin/api/metrics', api_metrics)
@@ -3309,6 +3844,14 @@ def create_bot() -> commands.Bot:
         logger.info(f"📊 Connected to {len(bot.guilds)} server(s)")
         activity = discord.Game(name="NBA 2K26 Boosting | !help")
         await bot.change_presence(activity=activity)
+
+        # ========== 缓存预热 ==========
+        if _RESPONSE_CACHE_AVAILABLE:
+            try:
+                _preload_response_cache()
+                logger.info(f"✅ Response cache preloaded ({len(get_cache().memory_cache)} entries)")
+            except Exception as e:
+                logger.warning(f"⚠️ Cache preloading failed: {e}")
         # 尝试自动创建 order-board 频道（如果不存在）
         for guild in bot.guilds:
             board_exists = discord.utils.get(guild.text_channels, name="order-board")
@@ -3373,25 +3916,138 @@ def create_bot() -> commands.Bot:
         logger.debug(
             f"🔍 DEBUG: User='{author_name}' ID={message.author.id} | ADMIN_USER_IDS={ADMIN_USER_IDS} | is_admin={is_admin}")
 
-        # ========== 识图处理（如果消息包含图片）==========
+        # ========== 识图处理 / 支付审核（Supervisor 多 Agent 模式）==========
         recognized_info = None
-        if message.attachments and IMAGE_RECOGNIZER_AVAILABLE:
+        has_image = False
+        image_url = None
+
+        if message.attachments:
             first_attachment = message.attachments[0]
             if first_attachment.content_type and first_attachment.content_type.startswith("image/"):
-                status_msg = await message.channel.send("🔍 Processing your image...")
+                has_image = True
+                image_url = first_attachment.url
+
+        # Supervisor 路由：有图片时走支付审核 Agent
+        if has_image and SUPERVISOR_AVAILABLE:
+            supervisor = get_supervisor()
+            route_decision = await supervisor.route(
+                user_msg=msg_content,
+                has_image=True,
+                image_url=image_url,
+            )
+
+            if route_decision.route == AgentRoute.PAYMENT_REVIEW:
+                logger.info(f"🔍 Supervisor routing to Payment Review Agent (conf={route_decision.confidence:.2f})")
                 try:
-                    from image_recognizer import image_recognizer
-                    if image_recognizer:
-                        recognized_info = await image_recognizer.recognize(first_attachment.url)
-                        if recognized_info:
-                            logger.info(f"🖼️ Image recognized: {recognized_info}")
-                            # 拼接识别信息到消息
-                            msg_content += f" [IMAGE_INFO: {json.dumps(recognized_info)}]"
-                finally:
+                    review_agent = get_payment_review_agent()
+                    # 从历史上下文提取期望金额和服务
+                    expected_amount = None
+                    expected_service = None
                     try:
-                        await status_msg.delete()
-                    except:
+                        history = await context_manager.get_context(channel_id)
+                        expected_service, expected_amount = parse_order_from_history(history)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Failed to extract order context for review: {e}")
+
+                    review_result = await review_agent.review(
+                        user_msg=msg_content,
+                        image_url=image_url,
+                        expected_amount=expected_amount,
+                        expected_service=expected_service,
+                        channel_id=channel_id,
+                        user_id=user_id,
+                    )
+
+                    # 根据审核结果处理
+                    if review_result.verdict == ReviewVerdict.APPROVE:
+                        # 审核通过 → 走正常的支付确认流程
+                        service_desc = expected_service or "Unknown Service"
+                        amount = review_result.extracted_amount or expected_amount or 0
+                        view = PaymentConfirmView(service_desc=service_desc, amount=amount)
+                        reply_text = (
+                            f"✅ **Payment Verified** by AI dual-engine verification.\n\n"
+                            f"**Service:** {service_desc}\n"
+                            f"**Amount:** ${amount:.2f}\n"
+                            f"**Method:** {review_result.rule_checks.get('payment_method', 'N/A')}\n\n"
+                            f"Admin, please click the button below to confirm and create the order.\n"
+                            f"_AI Confidence: {review_result.confidence:.0%}_"
+                        )
+                        try:
+                            await context_manager.save_context(channel_id, msg_content, reply_text)
+                        except Exception:
+                            pass
+                        logger.info(f"✅ Payment auto-approved: ${amount} for {service_desc}")
+                        await message.channel.send(reply_text, view=view)
+                        return
+
+                    elif review_result.verdict == ReviewVerdict.REJECT:
+                        # 审核拒绝
+                        reply_text = (
+                            f"❌ **Payment Verification Failed**\n\n"
+                            f"{review_result.reason}\n\n"
+                            f"Please contact support if you believe this is an error."
+                        )
+                        try:
+                            await context_manager.save_context(channel_id, msg_content, reply_text)
+                        except Exception:
+                            pass
+                        logger.warning(f"❌ Payment rejected: {review_result.reason}")
+                        await message.channel.send(reply_text)
+                        return
+
+                    else:
+                        # MANUAL_REVIEW — 需人工复核，同时将 OCR 信息附加到消息继续走 AI 处理
+                        if review_result.extracted_amount:
+                            msg_content += f" [PAYMENT_REVIEW: amount=${review_result.extracted_amount}, status=manual_review]"
+                        if review_result.ocr_text:
+                            msg_content += f" [OCR_TEXT: {review_result.ocr_text[:150]}]"
+                        logger.info(f"⚠️ Payment requires manual review: {review_result.reason[:80]}")
+
+                        # 走原有的识图逻辑拼接信息，继续下面的流程
+                        if IMAGE_RECOGNIZER_AVAILABLE:
+                            try:
+                                from image_recognizer import image_recognizer as _ir
+                                if _ir:
+                                    recognized_info = await _ir.recognize(image_url)
+                                    if recognized_info:
+                                        msg_content += f" [IMAGE_INFO: {json.dumps(recognized_info)}]"
+                            except Exception:
+                                pass
+
+                except Exception as e:
+                    logger.error(f"❌ Payment Review Agent failed, fallback to legacy: {e}")
+                    # 降级到原有的识图逻辑
+                    if IMAGE_RECOGNIZER_AVAILABLE:
+                        try:
+                            from image_recognizer import image_recognizer as _ir
+                            if _ir:
+                                recognized_info = await _ir.recognize(image_url)
+                                if recognized_info:
+                                    msg_content += f" [IMAGE_INFO: {json.dumps(recognized_info)}]"
+                        except Exception:
+                            pass
+            else:
+                # Supervisor 路由到其他 Agent（如 GENERAL），仍做 OCR 识别附加信息
+                if IMAGE_RECOGNIZER_AVAILABLE:
+                    try:
+                        from image_recognizer import image_recognizer as _ir
+                        if _ir:
+                            recognized_info = await _ir.recognize(image_url)
+                            if recognized_info:
+                                msg_content += f" [IMAGE_INFO: {json.dumps(recognized_info)}]"
+                    except Exception:
                         pass
+        elif has_image and IMAGE_RECOGNIZER_AVAILABLE:
+            # 无 Supervisor 模块，降级到原有识图逻辑
+            try:
+                from image_recognizer import image_recognizer
+                if image_recognizer:
+                    recognized_info = await image_recognizer.recognize(image_url)
+                    if recognized_info:
+                        logger.info(f"🖼️ Image recognized: {recognized_info}")
+                        msg_content += f" [IMAGE_INFO: {json.dumps(recognized_info)}]"
+            except Exception as e:
+                logger.warning(f"⚠️ Legacy image recognition failed: {e}")
 
         # ========== 全量用户记忆记录（不区分管理员/客户，所有消息都记录）==========
         # 记录发送者的消息到自己的记忆
@@ -3408,20 +4064,55 @@ def create_bot() -> commands.Bot:
             logger.warning(f"⚠️ Failed to save user memory: {e}")
 
         # ========== 管理员消息处理 ==========
-        # 管理员 @ bot 时正常回复；普通消息只记录到上下文，不触发 AI
+        # 管理员 @ bot 时：查找频道中最近未回复的客户消息并回复
         if is_admin:
-            # 检查是否 @ 了 bot — 如果是，正常处理（让管理员也能测试 bot）
             if bot.user in message.mentions:
-                logger.info(f"👔 Admin @{message.author.name} mentioned bot, processing normally")
-                # 继续走下面的客户消息处理流程
+                logger.info(f"👔 Admin @{author_name} mentioned bot in #{channel_name}")
+
+                # 读取频道最近消息，找到最后一条客户消息
+                try:
+                    last_user_msg = None
+                    last_user_id = None
+                    async for msg in message.channel.history(limit=30, before=message):
+                        if msg.author.bot:
+                            continue
+                        if msg.author.id in ADMIN_USER_IDS:
+                            continue
+                        if msg.content.strip():
+                            last_user_msg = msg.content.strip()
+                            last_user_id = str(msg.author.id)
+                            break
+
+                    if last_user_msg:
+                        logger.info(f"🧠 Found last customer message from {last_user_id}: {last_user_msg[:50]}...")
+                        # 保存管理员指令到上下文
+                        await context_manager.save_context(
+                            channel_id,
+                            f"[Admin: {author_name}] @bot (催促回复)",
+                            ""
+                        )
+                        # 以客户消息作为输入，调 AI 生成回复
+                        async with concurrency_semaphore:
+                            await handle_message(message, override_user_msg=last_user_msg, override_user_id=last_user_id)
+                        return
+                    else:
+                        logger.info(f"👔 No customer message found, sending ack")
+                        try:
+                            await message.channel.send("✅ I'm here and ready! No pending customer messages in this channel.")
+                        except Exception:
+                            pass
+                        return
+                except Exception as e:
+                    logger.error(f"❌ Failed to process admin mention: {e}", exc_info=True)
+                    return
             else:
-                # 管理员消息已记录到用户记忆，同时记录到频道上下文
+                # 管理员普通消息（没 @ bot），只记录不回复
                 if msg_content:
                     try:
                         await context_manager.save_context(
                             channel_id,
                             f"[Admin: {author_name}] {msg_content}",
-                            ""  # 空回复，不产生 bot 回复
+                            ""
                         )
                         logger.info(f"👤 Admin message recorded: @{author_name}: {msg_content[:50]}...")
                     except Exception as e:
@@ -3463,7 +4154,7 @@ def create_bot() -> commands.Bot:
             await handle_message(message)
 
     # ====================== 核心消息处理逻辑 ======================
-    async def handle_message(message: discord.Message):
+    async def handle_message(message: discord.Message, override_user_msg: str = None, override_user_id: str = None):
         """
         处理用户消息的核心逻辑
         1. 立即响应（防止 Discord 3s 超时）
@@ -3471,9 +4162,9 @@ def create_bot() -> commands.Bot:
         3. 记录 bot 回复到用户记忆
         """
         channel = message.channel
-        user_msg = message.content.replace(f"<@!{bot.user.id}>", "").replace(f"<@{bot.user.id}>", "").strip()
+        user_msg = override_user_msg or message.content.replace(f"<@!{bot.user.id}>", "").replace(f"<@{bot.user.id}>", "").strip()
         channel_id = str(channel.id)
-        user_id = str(message.author.id)
+        user_id = override_user_id or str(message.author.id)
         author_name = message.author.name
         channel_name = channel.name
 

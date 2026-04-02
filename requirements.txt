@@ -26,6 +26,9 @@ pytesseract>=0.3.10
 python-dotenv>=1.0.0
 requests>=2.31.0
 
+# 监控和可观测性
+prometheus-client>=0.17.0
+
 # 可选：本地模型加载
 torch>=2.0.0
 transformers>=4.30.0

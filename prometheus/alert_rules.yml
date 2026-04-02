@@ -1,0 +1,301 @@
+# Discord Bot 告警规则
+# 基于系统指标和业务指标设定多级告警
+
+groups:
+  # ===== 系统级告警 =====
+  - name: discord_bot_system_alerts
+    rules:
+      # Bot 进程宕机
+      - alert: DiscordBotDown
+        expr: up{job="discord-bot"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: discord-bot
+        annotations:
+          summary: "🚨 Discord Bot 进程宕机"
+          description: "Discord Bot 已停止响应超过 1 分钟，请立即检查！"
+
+      # CPU 使用率过高
+      - alert: HighCPUUsage
+        expr: |
+          100 * (1 - avg by(instance) (irate(process_cpu_seconds_total{job="discord-bot"}[5m])) / scalar(count(node_cpu_seconds_total{mode="idle"})))
+          > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ CPU 使用率过高"
+          description: "CPU 使用率超过 80% 已持续 5 分钟，当前值: {{ $value | printf \"%.1f\" }}%"
+
+      # 内存使用率过高
+      - alert: HighMemoryUsage
+        expr: |
+          100 * (process_resident_memory_bytes{job="discord-bot"} / (1024 * 1024 * 1024))
+          > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ 内存使用率过高"
+          description: "Bot 内存使用超过 80% 已持续 5 分钟"
+
+      # 内存泄漏检测
+      - alert: MemoryLeakSuspected
+        expr: |
+          deriv(process_resident_memory_bytes{job="discord-bot"}[1h]) > 1048576
+        for: 30m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "🔍 疑似内存泄漏"
+          description: "过去 30 分钟内内存持续增长，可能存在内存泄漏"
+
+  # ===== Discord 连接告警 =====
+  - name: discord_bot_connection_alerts
+    rules:
+      # WebSocket 心跳延迟过高
+      - alert: HighWebSocketLatency
+        expr: discord_bot_websocket_latency_ms > 5000
+        for: 2m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ Discord WebSocket 延迟过高"
+          description: "Discord WebSocket 延迟 {{ $value | printf \"%.0f\" }}ms，可能影响消息接收"
+
+      # 心跳丢失
+      - alert: DiscordHeartbeatLost
+        expr: increase(discord_bot_heartbeat_failures_total[5m]) > 3
+        for: 1m
+        labels:
+          severity: critical
+          service: discord-bot
+        annotations:
+          summary: "🚨 Discord 心跳丢失"
+          description: "5 分钟内心跳失败超过 3 次，Bot 可能已断开连接"
+
+      # 重连次数过多
+      - alert: FrequentReconnects
+        expr: increase(discord_bot_reconnects_total[10m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ 频繁重连"
+          description: "10 分钟内重连超过 5 次，请检查网络稳定性"
+
+      # Gateway 速率限制
+      - alert: DiscordRateLimited
+        expr: increase(discord_bot_rate_limits_hit_total[5m]) > 10
+        for: 0m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ Discord API 速率限制"
+          description: "5 分钟内触发速率限制超过 10 次"
+
+  # ===== AI 服务告警 =====
+  - name: discord_bot_ai_alerts
+    rules:
+      # AI 响应时间过长
+      - alert: SlowAIResponse
+        expr: |
+          histogram_quantile(0.95, rate(discord_bot_ai_request_duration_seconds_bucket[5m]))
+          > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ AI 响应时间过长"
+          description: "AI P95 响应时间超过 30 秒，当前值: {{ $value | printf \"%.1f\" }}s"
+
+      # AI 错误率过高
+      - alert: HighAIErrorRate
+        expr: |
+          (sum(rate(discord_bot_ai_requests_total{status="error"}[5m])) /
+           sum(rate(discord_bot_ai_requests_total[5m]))) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: discord-bot
+        annotations:
+          summary: "🚨 AI 错误率过高"
+          description: "AI 请求错误率超过 10%，当前值: {{ $value | printf \"%.1%\" }}"
+
+      # Token 消耗异常
+      - alert: HighTokenConsumption
+        expr: |
+          rate(discord_bot_ai_tokens_used_total[1h]) > 100000
+        for: 30m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ Token 消耗过高"
+          description: "每小时 Token 消耗超过 100K，请检查是否有异常请求"
+
+      # AI 请求队列堆积
+      - alert: AIQueueBacklog
+        expr: discord_bot_ai_queue_size > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ AI 请求队列堆积"
+          description: "AI 请求队列大小: {{ $value }}，可能有处理瓶颈"
+
+  # ===== 消息处理告警 =====
+  - name: discord_bot_message_alerts
+    rules:
+      # 消息处理延迟
+      - alert: MessageProcessingDelay
+        expr: |
+          histogram_quantile(0.9, rate(discord_bot_message_processing_seconds_bucket[5m]))
+          > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ 消息处理延迟"
+          description: "P90 消息处理时间超过 5 秒"
+
+      # 消息处理失败
+      - alert: MessageProcessingErrors
+        expr: increase(discord_bot_messages_failed_total[10m]) > 5
+        for: 0m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ 消息处理失败"
+          description: "10 分钟内有 {{ $value }} 条消息处理失败"
+
+      # 待处理消息积压
+      - alert: MessageBacklog
+        expr: discord_bot_pending_messages > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ 消息积压"
+          description: "待处理消息数: {{ $value }}"
+
+  # ===== RAG 系统告警 =====
+  - name: discord_bot_rag_alerts
+    rules:
+      # RAG 检索延迟
+      - alert: SlowRAGSearch
+        expr: |
+          histogram_quantile(0.95, rate(discord_bot_rag_search_duration_seconds_bucket[5m]))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ RAG 检索延迟"
+          description: "RAG P95 检索时间超过 2 秒"
+
+      # RAG 命中率低
+      - alert: LowRAGHitRate
+        expr: |
+          (sum(rate(discord_bot_rag_searches_total{hit="true"}[1h])) /
+           sum(rate(discord_bot_rag_searches_total[1h]))) < 0.5
+        for: 1h
+        labels:
+          severity: info
+          service: discord-bot
+        annotations:
+          summary: "📊 RAG 命中率偏低"
+          description: "过去 1 小时 RAG 命中率低于 50%，可能需要扩充知识库"
+
+      # 知识库加载失败
+      - alert: KnowledgeBaseLoadFailed
+        expr: discord_bot_knowledge_base_loaded == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: discord-bot
+        annotations:
+          summary: "🚨 知识库加载失败"
+          description: "知识库未能成功加载，RAG 功能不可用"
+
+  # ===== 业务指标告警 =====
+  - name: discord_bot_business_alerts
+    rules:
+      # 订单处理失败
+      - alert: OrderProcessingFailures
+        expr: increase(discord_bot_orders_failed_total[1h]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ 订单处理失败"
+          description: "1 小时内有 {{ $value }} 个订单处理失败"
+
+      # 无响应时长告警
+      - alert: BotInactive
+        expr: |
+          increase(discord_bot_messages_processed_total[30m]) == 0
+          and discord_bot_websocket_latency_ms > 0
+        for: 0m
+        labels:
+          severity: info
+          service: discord-bot
+        annotations:
+          summary: "📊 Bot 30 分钟内无消息处理"
+          description: "Bot 已连接但 30 分钟内未处理任何消息"
+
+      # 用户满意度下降（负面反馈）
+      - alert: LowUserSatisfaction
+        expr: |
+          (sum(rate(discord_bot_user_feedback_total{type="negative"}[1h])) /
+           sum(rate(discord_bot_user_feedback_total[1h]))) > 0.3
+        for: 30m
+        labels:
+          severity: info
+          service: discord-bot
+        annotations:
+          summary: "📊 用户满意度下降"
+          description: "过去 1 小时负面反馈比例超过 30%"
+
+  # ===== 缓存告警 =====
+  - name: discord_bot_cache_alerts
+    rules:
+      # 缓存命中率低
+      - alert: LowCacheHitRate
+        expr: |
+          (sum(rate(discord_bot_cache_hits_total[10m])) /
+           (sum(rate(discord_bot_cache_hits_total[10m])) + sum(rate(discord_bot_cache_misses_total[10m]))))
+          < 0.3
+        for: 30m
+        labels:
+          severity: info
+          service: discord-bot
+        annotations:
+          summary: "📊 缓存命中率偏低"
+          description: "缓存命中率低于 30%，可能需要调整缓存策略"
+
+      # 缓存内存占用过高
+      - alert: CacheMemoryHigh
+        expr: discord_bot_cache_memory_bytes / (1024 * 1024 * 1024) > 1
+        for: 10m
+        labels:
+          severity: warning
+          service: discord-bot
+        annotations:
+          summary: "⚠️ 缓存内存占用过高"
+          description: "缓存占用内存超过 1GB"
+

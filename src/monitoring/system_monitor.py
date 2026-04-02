@@ -195,6 +195,12 @@ class MetricsCollector:
     def inc_order(self):
         self.orders_created += 1
         
+    def inc_cache_hit(self):
+        self.cache_hits = getattr(self, 'cache_hits', 0) + 1
+
+    def inc_cache_miss(self):
+        self.cache_misses = getattr(self, 'cache_misses', 0) + 1
+
     # ==================== Prometheus 格式输出 ====================
         
     def to_prometheus(self) -> str:
@@ -247,6 +253,14 @@ class MetricsCollector:
             "# HELP discord_bot_orders_created_total Total orders created",
             "# TYPE discord_bot_orders_created_total counter",
             f"discord_bot_orders_created_total {self.orders_created}",
+            "",
+            "# HELP discord_bot_cache_hits_total Total cache hits",
+            "# TYPE discord_bot_cache_hits_total counter",
+            f"discord_bot_cache_hits_total {getattr(self, 'cache_hits', 0)}",
+            "",
+            "# HELP discord_bot_cache_misses_total Total cache misses",
+            "# TYPE discord_bot_cache_misses_total counter",
+            f"discord_bot_cache_misses_total {getattr(self, 'cache_misses', 0)}",
             "",
             "# HELP discord_bot_uptime_seconds Bot uptime in seconds",
             "# TYPE discord_bot_uptime_seconds gauge",
